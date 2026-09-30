@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A Copy of a Copy — Projection Mode</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="projection" aria-label="Interactive projection of Cantonese sound particles"></canvas>
+
+  <aside id="hud" class="hud">
+    <header>
+      <p>A COPY OF A COPY</p>
+      <strong>SPATIAL TEST / LIVE</strong>
+    </header>
+    <div class="rule"></div>
+    <p id="exe">&gt; sing1.exe</p>
+    <dl>
+      <div><dt>amplitude</dt><dd id="amplitude">0.00</dd></div>
+      <div><dt>cursor_velocity</dt><dd id="velocity">0.00</dd></div>
+      <div><dt>particle_count</dt><dd id="particle-count">0</dd></div>
+      <div><dt>repulsion_radius</dt><dd id="radius">180</dd></div>
+      <div><dt>live_input</dt><dd>mouse : on</dd></div>
+      <div><dt>audio_source</dt><dd id="audio-source">recording : ready</dd></div>
+    </dl>
+    <div class="meter"><i id="meter-fill"></i></div>
+    <div class="stream" id="stream"></div>
+    <div class="rule"></div>
+    <p class="flow">SOURCE → SOUND → COPY</p>
+  </aside>
+
+  <nav id="sound-nav" class="sound-nav" aria-label="Select a Cantonese sound"></nav>
+
+  <section id="help" class="help">
+    <span>MOVE — scatter</span>
+    <span>CLICK — waveform ripple</span>
+    <span>1–5 — sound</span>
+    <span>F — fullscreen</span>
+    <span>H — hide UI</span>
+  </section>
+
+  <div class="project-title">
+    <span id="source-label">星 / sing1 / SOURCE</span>
+    <span>multilingual sound-alikes / ripple test</span>
+  </div>
+
+  <button id="fullscreen" class="fullscreen" type="button">FULLSCREEN ↗</button>
+  <script src="app.js"></script>
+</body>
+</html>
