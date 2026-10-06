@@ -9,6 +9,8 @@
 
 No external library or internet connection is required.
 
+The layout responds to desktop, tablet, mobile portrait and mobile landscape viewports. Mobile browsers use the live visual viewport height so address-bar changes do not stretch or crop the canvas; controls respect safe areas and the sound selector becomes a touch-friendly bottom strip.
+
 ## Colour system
 
 - Near-white / very pale ice blue — high-key projection field

@@ -89,6 +89,23 @@ const mouse = {
 
 const current = () => SOUNDS[activeIndex];
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+function getLayout() {
+  const compact = width <= 700 || height <= 500;
+  const portrait = compact && height > width;
+  return {
+    compact,
+    portrait,
+    cx: portrait ? width * .5 : compact ? width * .55 : width * .58,
+    cy: portrait ? height * .56 : height * .5,
+    glyphSize: portrait
+      ? Math.min(width * .86, height * .49)
+      : compact
+        ? Math.min(width * .58, height * .78)
+        : Math.min(width * .62, height * .83)
+  };
+}
+
 const recordings = SOUNDS.map(sound => {
   const recording = new Audio(sound.audio);
   recording.preload = "auto";
@@ -179,14 +196,18 @@ function setSound(index) {
   document.querySelector("#source-label").textContent = `${current().char} / ${current().jyutping} / SOURCE`;
   buildNavigation();
   buildGlyph();
-  burst(width * .58, height * .5, 1.15);
+  const layout = getLayout();
+  burst(layout.cx, layout.cy, 1.15);
   playRecording();
 }
 
 function resize() {
+  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  document.documentElement.style.setProperty("--app-height", `${Math.round(viewportHeight)}px`);
   const rect = canvas.getBoundingClientRect();
   width = rect.width;
   height = rect.height;
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.round(width * dpr);
   canvas.height = Math.round(height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -197,7 +218,8 @@ function resize() {
 
 function buildGlyph() {
   if (!width || !height) return;
-  const size = Math.floor(Math.min(width * .62, height * .83));
+  const layout = getLayout();
+  const size = Math.floor(layout.glyphSize);
   const offscreen = document.createElement("canvas");
   offscreen.width = size;
   offscreen.height = size;
@@ -208,11 +230,13 @@ function buildGlyph() {
   off.font = `900 ${size * .79}px "PingFang HK", "Noto Sans CJK HK", sans-serif`;
   off.fillText(current().char, size / 2, size / 2 + size * .03);
 
-  const targetCount = clamp(Math.round((width * height) / 225), 3200, 8500);
+  const targetCount = layout.compact
+    ? clamp(Math.round((width * height) / 190), 2400, 5200)
+    : clamp(Math.round((width * height) / 225), 3200, 8500);
   const step = Math.max(4, Math.round(Math.sqrt((size * size) / targetCount)));
   const pixels = off.getImageData(0, 0, size, size).data;
-  const originX = width * .58 - size / 2;
-  const originY = height * .5 - size / 2;
+  const originX = layout.cx - size / 2;
+  const originY = layout.cy - size / 2;
   const prior = particles;
   const next = [];
   const alphabet = `${current().copies.join("")}0123456789#/.`;
@@ -241,15 +265,18 @@ function buildGlyph() {
 }
 
 function buildLabels() {
-  const cx = width * .59;
-  const cy = height * .5;
+  const layout = getLayout();
+  const cx = layout.cx + (layout.compact && !layout.portrait ? width * .01 : width * .01);
+  const cy = layout.cy;
   const responses = current().responses || current().copies.map(word => ({ lang: "EN", word }));
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   const previous = labels;
   const fieldSize = Math.min(width, height);
   labels = responses.map((response, i) => {
     const angle = -1.3 + i * goldenAngle;
-    const radius = fieldSize * (.27 + (i % 3) * .055);
+    const radius = fieldSize * (layout.portrait
+      ? (.22 + (i % 3) * .04)
+      : (.27 + (i % 3) * .055));
     const x = cx + Math.cos(angle) * radius * 1.22;
     const y = cy + Math.sin(angle) * radius * .84;
     const old = previous.find(label => label.lang === response.lang && label.word === response.word)
@@ -366,9 +393,10 @@ function updateParticle(p, dt) {
 }
 
 function drawBackground(time) {
+  const layout = getLayout();
   const waterField = ctx.createRadialGradient(
-    width * .57, height * .48, 0,
-    width * .57, height * .48, Math.max(width, height) * .8
+    layout.cx, layout.cy - height * .02, 0,
+    layout.cx, layout.cy - height * .02, Math.max(width, height) * .8
   );
   waterField.addColorStop(0, "#ffffff");
   waterField.addColorStop(.58, "#f9fcff");
@@ -639,7 +667,8 @@ window.addEventListener("keydown", event => {
   if (event.key.toLowerCase() === "f") toggleFullscreen();
   if (event.key === " ") {
     event.preventDefault();
-    burst(width * .58, height * .5, 1.25);
+    const layout = getLayout();
+    burst(layout.cx, layout.cy, 1.25);
     playRecording();
   }
   if (event.key.toLowerCase() === "r") buildGlyph();
@@ -651,8 +680,14 @@ async function toggleFullscreen() {
 }
 
 fullscreenButton.addEventListener("click", toggleFullscreen);
-window.addEventListener("resize", resize);
-document.addEventListener("fullscreenchange", () => setTimeout(resize, 80));
+let resizeFrame = 0;
+function requestResize() {
+  cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(resize);
+}
+window.addEventListener("resize", requestResize);
+window.visualViewport?.addEventListener("resize", requestResize);
+document.addEventListener("fullscreenchange", () => setTimeout(requestResize, 80));
 
 buildNavigation();
 const cachedRecordings = Promise.all(recordings.map(recording => new Promise(resolve => {
