@@ -11,6 +11,8 @@ No external library or internet connection is required.
 
 The layout responds to desktop, tablet, mobile portrait and mobile landscape viewports. Mobile browsers use the live visual viewport height so address-bar changes do not stretch or crop the canvas; controls respect safe areas and the sound selector becomes a touch-friendly bottom strip.
 
+The same `index.html` is used on every device. It automatically selects a mobile, tablet, balanced-desktop or high-quality render profile based on screen size, touch input, pixel load and available hardware. These profiles only adjust canvas density, particle count, waveform resolution and frame-rate ceiling; the visual system and interaction remain identical.
+
 ## Colour system
 
 - Near-white / very pale ice blue — high-key projection field

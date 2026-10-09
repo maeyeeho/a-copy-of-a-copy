@@ -67,7 +67,7 @@ const canvas = document.querySelector("#projection");
 const ctx = canvas.getContext("2d", { alpha: false });
 const nav = document.querySelector("#sound-nav");
 const fullscreenButton = document.querySelector("#fullscreen");
-const touchPerformanceMode = navigator.maxTouchPoints > 0
+const touchDevice = navigator.maxTouchPoints > 0
   || window.matchMedia("(pointer: coarse)").matches
   || /iPad|iPhone|iPod/.test(navigator.userAgent);
 
@@ -87,6 +87,21 @@ let activeBufferSource = null;
 let playbackId = 0;
 let audioContext = null;
 let lastRenderedTime = 0;
+let renderProfile = {
+  name: "high",
+  dpr: 2,
+  particleDivisor: 225,
+  minParticles: 3200,
+  maxParticles: 7200,
+  scanlineStep: 4,
+  noiseCount: 40,
+  textThreshold: .34,
+  labelShadow: 7,
+  wavePoints: 280,
+  maxWaves: 4,
+  fps: 60,
+  hudInterval: 80
+};
 
 const mouse = {
   x: -10000,
@@ -114,6 +129,44 @@ function getLayout() {
       : compact
         ? Math.min(width * .58, height * .78)
         : Math.min(width * .62, height * .83)
+  };
+}
+
+function chooseRenderProfile() {
+  const shortSide = Math.min(width, height);
+  const area = width * height;
+  const cores = navigator.hardwareConcurrency || 6;
+  const memory = navigator.deviceMemory || 6;
+
+  if (shortSide < 620 || (touchDevice && shortSide < 760)) {
+    return {
+      name: "mobile", dpr: 1.15, particleDivisor: 260,
+      minParticles: 2000, maxParticles: 2600, scanlineStep: 10,
+      noiseCount: 12, textThreshold: .62, labelShadow: 1.5,
+      wavePoints: 100, maxWaves: 2, fps: 40, hudInterval: 200
+    };
+  }
+  if (touchDevice) {
+    return {
+      name: "tablet", dpr: 1.35, particleDivisor: 380,
+      minParticles: 2400, maxParticles: 3400, scanlineStep: 8,
+      noiseCount: 20, textThreshold: .56, labelShadow: 2,
+      wavePoints: 140, maxWaves: 2, fps: 45, hudInterval: 160
+    };
+  }
+  if (cores <= 4 || memory <= 4 || area > 2200000) {
+    return {
+      name: "balanced", dpr: 1.5, particleDivisor: 300,
+      minParticles: 2800, maxParticles: 5200, scanlineStep: 6,
+      noiseCount: 28, textThreshold: .45, labelShadow: 4,
+      wavePoints: 200, maxWaves: 3, fps: 50, hudInterval: 120
+    };
+  }
+  return {
+    name: "high", dpr: 2, particleDivisor: 225,
+    minParticles: 3200, maxParticles: 7200, scanlineStep: 4,
+    noiseCount: 40, textThreshold: .34, labelShadow: 7,
+    wavePoints: 280, maxWaves: 4, fps: 60, hudInterval: 80
   };
 }
 
@@ -227,7 +280,9 @@ function resize() {
   const rect = canvas.getBoundingClientRect();
   width = rect.width;
   height = rect.height;
-  dpr = Math.min(window.devicePixelRatio || 1, touchPerformanceMode ? 1.35 : 2);
+  renderProfile = chooseRenderProfile();
+  document.body.dataset.quality = renderProfile.name;
+  dpr = Math.min(window.devicePixelRatio || 1, renderProfile.dpr);
   canvas.width = Math.round(width * dpr);
   canvas.height = Math.round(height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -250,11 +305,11 @@ function buildGlyph() {
   off.font = `900 ${size * .79}px "PingFang HK", "Noto Sans CJK HK", sans-serif`;
   off.fillText(current().char, size / 2, size / 2 + size * .03);
 
-  const targetCount = touchPerformanceMode
-    ? clamp(Math.round((width * height) / 420), 1800, 3200)
-    : layout.compact
-      ? clamp(Math.round((width * height) / 190), 2400, 5200)
-      : clamp(Math.round((width * height) / 225), 3200, 8500);
+  const targetCount = clamp(
+    Math.round((width * height) / renderProfile.particleDivisor),
+    renderProfile.minParticles,
+    renderProfile.maxParticles
+  );
   const step = Math.max(4, Math.round(Math.sqrt((size * size) / targetCount)));
   const pixels = off.getImageData(0, 0, size, size).data;
   const originX = layout.cx - size / 2;
@@ -276,7 +331,9 @@ function buildGlyph() {
           vy: old?.vy ?? 0,
           char: alphabet[Math.floor(Math.random() * alphabet.length)],
           seed: Math.random(),
-          size: touchPerformanceMode ? 6 : 5 + Math.random() * 3.5
+          size: renderProfile.name === "mobile" || renderProfile.name === "tablet"
+            ? 6
+            : 5 + Math.random() * 3.5
         });
       }
     }
@@ -357,7 +414,7 @@ function pointerLeave() {
 }
 
 function burst(x, y, strength = 1) {
-  if (touchPerformanceMode && shockwaves.length >= 2) shockwaves.shift();
+  while (shockwaves.length >= renderProfile.maxWaves) shockwaves.shift();
   shockwaves.push({
     x,
     y,
@@ -433,7 +490,7 @@ function drawBackground(time) {
 
   ctx.strokeStyle = "rgba(23,76,156,.032)";
   ctx.lineWidth = 1;
-  const scanlineStep = touchPerformanceMode ? 8 : 4;
+  const scanlineStep = renderProfile.scanlineStep;
   for (let y = 0; y < height; y += scanlineStep) {
     ctx.beginPath();
     ctx.moveTo(0, y);
@@ -441,7 +498,7 @@ function drawBackground(time) {
     ctx.stroke();
   }
 
-  const noiseCount = touchPerformanceMode ? 20 : 40;
+  const noiseCount = renderProfile.noiseCount;
   for (let i = 0; i < noiseCount; i++) {
     const x = (i * 193.71 + time * .009) % width;
     const y = (i * 83.11) % height;
@@ -461,7 +518,7 @@ function drawParticles(dt) {
     else if (displacement > 20 && p.seed > .55) ctx.fillStyle = "#2e83cf";
     else ctx.fillStyle = "#031b4e";
     ctx.globalAlpha = clamp(.72 + p.seed * .28 - displacement * .001, .34, 1);
-    if (p.seed > (touchPerformanceMode ? .56 : .34)) {
+    if (p.seed > renderProfile.textThreshold) {
       ctx.font = `${p.size}px SFMono-Regular, Menlo, monospace`;
       ctx.fillText(p.char, p.x, p.y);
     } else {
@@ -535,7 +592,7 @@ function drawCopies(time, dt) {
     ctx.fillStyle = `rgba(${colour.join(",")},${clamp(.035 + energy * .045, 0, .1)})`;
     ctx.fillText(label.word, -label.vx * 3.2, -label.vy * 3.2);
     ctx.shadowColor = `rgba(${colour.join(",")},.22)`;
-    ctx.shadowBlur = touchPerformanceMode ? 2 : 4 + label.depth * 5;
+    ctx.shadowBlur = renderProfile.labelShadow;
     ctx.fillStyle = `rgba(${colour.join(",")},${clamp(label.alpha + energy * .38, 0, .9)})`;
     ctx.fillText(label.word, 0, 0);
     ctx.shadowBlur = 0;
@@ -570,7 +627,7 @@ function drawShockwaves(dt, time) {
     ctx.shadowColor = `rgba(49,92,255,${Math.max(0, wave.life) * .34})`;
     ctx.shadowBlur = 9;
     ctx.beginPath();
-    const points = touchPerformanceMode ? 140 : 280;
+    const points = renderProfile.wavePoints;
     for (let i = 0; i <= points; i++) {
       const angle = i / points * Math.PI * 2;
       const travellingPhase = wave.radius * .075 - time * .0026;
@@ -679,7 +736,7 @@ function playRecording() {
 }
 
 function animate(time) {
-  if (touchPerformanceMode && time - lastRenderedTime < 1000 / 45) {
+  if (renderProfile.fps < 60 && time - lastRenderedTime < 1000 / renderProfile.fps) {
     requestAnimationFrame(animate);
     return;
   }
@@ -692,7 +749,7 @@ function animate(time) {
   drawCopies(time, dt);
   drawParticles(dt);
   drawShockwaves(dt, time);
-  if (time - lastHudUpdate > (touchPerformanceMode ? 160 : 80)) {
+  if (time - lastHudUpdate > renderProfile.hudInterval) {
     updateHud();
     lastHudUpdate = time;
   }
