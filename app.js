@@ -656,6 +656,7 @@ function animate(time) {
 canvas.addEventListener("pointermove", pointerMove);
 canvas.addEventListener("pointerleave", pointerLeave);
 canvas.addEventListener("pointerdown", event => {
+  document.body.classList.add("has-interacted");
   pointerMove(event);
   burst(mouse.x, mouse.y, 1.1);
   playRecording();

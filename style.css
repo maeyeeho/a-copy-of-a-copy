@@ -97,6 +97,31 @@ body {
   pointer-events: none;
 }
 
+.touch-hint {
+  display: none;
+  position: fixed;
+  z-index: 3;
+  left: 2vw;
+  bottom: calc(4vh + 42px);
+  margin: 0;
+  color: rgba(8,45,110,.72);
+  font: 500 clamp(10px, 1vw, 14px)/1.5 "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  letter-spacing: .04em;
+  text-align: left;
+  text-shadow: 0 0 10px rgba(249,252,255,.95);
+  transition: opacity 1.2s ease;
+  pointer-events: none;
+}
+
+.touch-hint span { display: block; }
+.touch-hint span + span {
+  margin-top: 3px;
+  color: rgba(8,45,110,.48);
+  font-size: .88em;
+}
+
+.has-interacted .touch-hint { opacity: .3; }
+
 .project-title {
   position: fixed;
   z-index: 2;
@@ -113,7 +138,17 @@ body {
 .project-title span:first-child { color: var(--navy); font-weight: 800; }
 
 .fullscreen { position: fixed; z-index: 4; right: 2vw; top: calc(4vh + 43px); transition: opacity .25s; }
-.ui-hidden .hud, .ui-hidden .sound-nav, .ui-hidden .help, .ui-hidden .project-title, .ui-hidden .fullscreen { opacity: 0; pointer-events: none; }
+.ui-hidden .hud, .ui-hidden .sound-nav, .ui-hidden .help, .ui-hidden .touch-hint, .ui-hidden .project-title, .ui-hidden .fullscreen { opacity: 0; pointer-events: none; }
+
+@media (hover: none), (pointer: coarse) {
+  .help { display: none; }
+  .touch-hint { display: block; }
+}
+
+@media (max-width: 1180px) {
+  .help { display: none; }
+  .touch-hint { display: block; }
+}
 
 @media (max-width: 700px), (max-height: 500px) {
   body { cursor: default; }
@@ -142,6 +177,16 @@ body {
   .meter { height: 3px; margin: 5px 0 0; }
 
   .help { display: none; }
+
+  .touch-hint {
+    display: block;
+    left: max(10px, env(safe-area-inset-left));
+    right: auto;
+    width: calc(100vw - max(20px, env(safe-area-inset-left) + env(safe-area-inset-right)));
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 47px);
+    font-size: 9px;
+    text-align: left;
+  }
 
   .project-title {
     top: max(10px, env(safe-area-inset-top));
@@ -184,4 +229,12 @@ body {
   .hud dl, .hud .meter { display: none; }
   .sound-nav { right: auto; max-width: calc(100vw - 22px); }
   .sound-nav button { flex: 0 0 auto; min-width: 62px; padding: 7px 8px; }
+  .touch-hint {
+    left: 12px;
+    right: auto;
+    bottom: 43px;
+    width: auto;
+    max-width: 430px;
+    text-align: left;
+  }
 }
