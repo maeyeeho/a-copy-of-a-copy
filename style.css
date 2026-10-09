@@ -89,25 +89,31 @@ body {
   z-index: 2;
   right: 2vw;
   bottom: 4vh;
-  display: flex;
-  gap: 18px;
+  display: grid;
+  justify-items: end;
+  gap: 4px;
   color: rgba(8,45,110,.52);
   font-size: clamp(7px, .58vw, 10px);
   transition: opacity .25s;
   pointer-events: none;
+}
+.help span + span {
+  color: rgba(8,45,110,.38);
+  font-size: .88em;
+  letter-spacing: .08em;
 }
 
 .touch-hint {
   display: none;
   position: fixed;
   z-index: 3;
-  left: 2vw;
+  right: 2vw;
   bottom: calc(4vh + 42px);
   margin: 0;
   color: rgba(8,45,110,.72);
   font: 500 clamp(10px, 1vw, 14px)/1.5 "PingFang SC", "Noto Sans CJK SC", sans-serif;
   letter-spacing: .04em;
-  text-align: left;
+  text-align: right;
   text-shadow: 0 0 10px rgba(249,252,255,.95);
   transition: opacity 1.2s ease;
   pointer-events: none;
@@ -115,9 +121,10 @@ body {
 
 .touch-hint span { display: block; }
 .touch-hint span + span {
-  margin-top: 3px;
+  margin-top: 4px;
   color: rgba(8,45,110,.48);
   font-size: .88em;
+  letter-spacing: .08em;
 }
 
 .has-interacted .touch-hint { opacity: .3; }
@@ -180,12 +187,12 @@ body {
 
   .touch-hint {
     display: block;
-    left: max(10px, env(safe-area-inset-left));
-    right: auto;
+    left: auto;
+    right: max(10px, env(safe-area-inset-right));
     width: calc(100vw - max(20px, env(safe-area-inset-left) + env(safe-area-inset-right)));
     bottom: calc(max(10px, env(safe-area-inset-bottom)) + 47px);
     font-size: 9px;
-    text-align: left;
+    text-align: right;
   }
 
   .project-title {
@@ -230,11 +237,11 @@ body {
   .sound-nav { right: auto; max-width: calc(100vw - 22px); }
   .sound-nav button { flex: 0 0 auto; min-width: 62px; padding: 7px 8px; }
   .touch-hint {
-    left: 12px;
-    right: auto;
+    left: auto;
+    right: 12px;
     bottom: 43px;
     width: auto;
     max-width: 430px;
-    text-align: left;
+    text-align: right;
   }
 }

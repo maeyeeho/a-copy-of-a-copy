@@ -5,7 +5,8 @@ const SOUNDS = [
       { lang: "EN", word: "SEE" }, { lang: "EN", word: "SEA" },
       { lang: "JA", word: "シ" }, { lang: "KO", word: "시" },
       { lang: "FR", word: "SI" }, { lang: "DE", word: "SIE" },
-      { lang: "ES", word: "SÍ" }, { lang: "IT", word: "SÌ" }
+      { lang: "ES", word: "SÍ" }, { lang: "IT", word: "SÌ" },
+      { lang: "TH", word: "ซี" }, { lang: "AR", word: "سي" }
     ]
   },
   {
@@ -14,7 +15,8 @@ const SOUNDS = [
       { lang: "EN", word: "SING" }, { lang: "EN", word: "SIN" },
       { lang: "JA", word: "シン" }, { lang: "KO", word: "싱" },
       { lang: "FR", word: "SIGNE" }, { lang: "DE", word: "SINN" },
-      { lang: "ES", word: "SIN" }, { lang: "EN", word: "THING" }
+      { lang: "ES", word: "SIN" }, { lang: "EN", word: "THING" },
+      { lang: "TH", word: "ซิง" }, { lang: "AR", word: "سينغ" }
     ]
   },
   {
@@ -23,7 +25,8 @@ const SOUNDS = [
       { lang: "EN", word: "MY" }, { lang: "EN", word: "MINE" },
       { lang: "JA", word: "マイ" }, { lang: "KO", word: "마이" },
       { lang: "FR", word: "MAILLE" }, { lang: "DE", word: "MAI" },
-      { lang: "IT", word: "MAI" }, { lang: "EN", word: "MAI" }
+      { lang: "IT", word: "MAI" }, { lang: "EN", word: "MAI" },
+      { lang: "TH", word: "ไหม" }, { lang: "AR", word: "ماي" }
     ]
   },
   {
@@ -32,7 +35,8 @@ const SOUNDS = [
       { lang: "EN", word: "SUM" }, { lang: "EN", word: "SOME" },
       { lang: "JA", word: "サム" }, { lang: "KO", word: "삼" },
       { lang: "FR", word: "SOMME" }, { lang: "DE", word: "SAM" },
-      { lang: "EN", word: "SAM" }, { lang: "ES", word: "SAM" }
+      { lang: "EN", word: "SAM" }, { lang: "ES", word: "SAM" },
+      { lang: "TH", word: "ซัม" }, { lang: "AR", word: "سام" }
     ]
   },
   {
@@ -41,7 +45,8 @@ const SOUNDS = [
       { lang: "EN", word: "FAN" }, { lang: "EN", word: "FUN" },
       { lang: "JA", word: "ファン" }, { lang: "KO", word: "판" },
       { lang: "FR", word: "FAN" }, { lang: "DE", word: "FAHNE" },
-      { lang: "ES", word: "FAN" }, { lang: "EN", word: "FINE" }
+      { lang: "ES", word: "FAN" }, { lang: "EN", word: "FINE" },
+      { lang: "TH", word: "ฟาน" }, { lang: "AR", word: "فان" }
     ]
   }
 ];
@@ -53,13 +58,18 @@ const LANGUAGE_COLOURS = {
   FR: [101, 88, 232],
   DE: [46, 131, 207],
   ES: [86, 207, 229],
-  IT: [41, 163, 190]
+  IT: [41, 163, 190],
+  TH: [0, 150, 210],
+  AR: [92, 72, 210]
 };
 
 const canvas = document.querySelector("#projection");
 const ctx = canvas.getContext("2d", { alpha: false });
 const nav = document.querySelector("#sound-nav");
 const fullscreenButton = document.querySelector("#fullscreen");
+const touchPerformanceMode = navigator.maxTouchPoints > 0
+  || window.matchMedia("(pointer: coarse)").matches
+  || /iPad|iPhone|iPod/.test(navigator.userAgent);
 
 let width = 0;
 let height = 0;
@@ -76,6 +86,7 @@ let activeRecording = null;
 let activeBufferSource = null;
 let playbackId = 0;
 let audioContext = null;
+let lastRenderedTime = 0;
 
 const mouse = {
   x: -10000,
@@ -119,6 +130,11 @@ function getAudioContext() {
   if (!AudioContext) return null;
   if (!audioContext) audioContext = new AudioContext();
   return audioContext;
+}
+
+function unlockAudio() {
+  const audio = getAudioContext();
+  if (audio?.state === "suspended") audio.resume().catch(() => {});
 }
 
 function detectVoiceStart(buffer) {
@@ -185,6 +201,7 @@ function buildNavigation() {
     button.type = "button";
     button.className = index === activeIndex ? "active" : "";
     button.textContent = `${index + 1}  ${sound.char} / ${sound.jyutping}`;
+    button.style.touchAction = "manipulation";
     button.addEventListener("click", () => setSound(index));
     nav.appendChild(button);
   });
@@ -194,11 +211,14 @@ function setSound(index) {
   activeIndex = index;
   document.querySelector("#exe").textContent = `> ${current().jyutping}.exe`;
   document.querySelector("#source-label").textContent = `${current().char} / ${current().jyutping} / SOURCE`;
-  buildNavigation();
-  buildGlyph();
-  const layout = getLayout();
-  burst(layout.cx, layout.cy, 1.15);
+  // Start audio before rebuilding thousands of glyph particles.
   playRecording();
+  buildNavigation();
+  requestAnimationFrame(() => {
+    buildGlyph();
+    const layout = getLayout();
+    burst(layout.cx, layout.cy, 1.15);
+  });
 }
 
 function resize() {
@@ -207,7 +227,7 @@ function resize() {
   const rect = canvas.getBoundingClientRect();
   width = rect.width;
   height = rect.height;
-  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  dpr = Math.min(window.devicePixelRatio || 1, touchPerformanceMode ? 1.35 : 2);
   canvas.width = Math.round(width * dpr);
   canvas.height = Math.round(height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -230,9 +250,11 @@ function buildGlyph() {
   off.font = `900 ${size * .79}px "PingFang HK", "Noto Sans CJK HK", sans-serif`;
   off.fillText(current().char, size / 2, size / 2 + size * .03);
 
-  const targetCount = layout.compact
-    ? clamp(Math.round((width * height) / 190), 2400, 5200)
-    : clamp(Math.round((width * height) / 225), 3200, 8500);
+  const targetCount = touchPerformanceMode
+    ? clamp(Math.round((width * height) / 420), 1800, 3200)
+    : layout.compact
+      ? clamp(Math.round((width * height) / 190), 2400, 5200)
+      : clamp(Math.round((width * height) / 225), 3200, 8500);
   const step = Math.max(4, Math.round(Math.sqrt((size * size) / targetCount)));
   const pixels = off.getImageData(0, 0, size, size).data;
   const originX = layout.cx - size / 2;
@@ -254,7 +276,7 @@ function buildGlyph() {
           vy: old?.vy ?? 0,
           char: alphabet[Math.floor(Math.random() * alphabet.length)],
           seed: Math.random(),
-          size: 5 + Math.random() * 3.5
+          size: touchPerformanceMode ? 6 : 5 + Math.random() * 3.5
         });
       }
     }
@@ -299,7 +321,9 @@ function buildLabels() {
       phase: i * .83,
       phase2: i * 1.37 + .7,
       rotation: old?.rotation ?? (Math.random() - .5) * .025,
-      rotationVelocity: old?.rotationVelocity ?? 0
+      rotationVelocity: old?.rotationVelocity ?? 0,
+      springScale: old?.springScale ?? 0,
+      scaleVelocity: old?.scaleVelocity ?? 0
     };
   });
 }
@@ -333,6 +357,7 @@ function pointerLeave() {
 }
 
 function burst(x, y, strength = 1) {
+  if (touchPerformanceMode && shockwaves.length >= 2) shockwaves.shift();
   shockwaves.push({
     x,
     y,
@@ -359,9 +384,11 @@ function burst(x, y, strength = 1) {
     const range = Math.min(width, height) * .58;
     if (distance < range) {
       const force = Math.pow(1 - distance / range, 1.35) * 8.5 * strength;
+      const proximity = 1 - distance / range;
       label.vx += dx / distance * force;
       label.vy += dy / distance * force;
       label.rotationVelocity += ((dx / distance) * .003 + (Math.random() - .5) * .012) * strength;
+      label.scaleVelocity += proximity * .42 * strength;
     }
   });
   energy = 1;
@@ -406,14 +433,16 @@ function drawBackground(time) {
 
   ctx.strokeStyle = "rgba(23,76,156,.032)";
   ctx.lineWidth = 1;
-  for (let y = 0; y < height; y += 4) {
+  const scanlineStep = touchPerformanceMode ? 8 : 4;
+  for (let y = 0; y < height; y += scanlineStep) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(width, y + Math.sin(time * .001 + y) * .18);
     ctx.stroke();
   }
 
-  for (let i = 0; i < 40; i++) {
+  const noiseCount = touchPerformanceMode ? 20 : 40;
+  for (let i = 0; i < noiseCount; i++) {
     const x = (i * 193.71 + time * .009) % width;
     const y = (i * 83.11) % height;
     ctx.fillStyle = i % 7 === 0 ? "rgba(49,92,255,.20)" : "rgba(23,76,156,.07)";
@@ -432,7 +461,7 @@ function drawParticles(dt) {
     else if (displacement > 20 && p.seed > .55) ctx.fillStyle = "#2e83cf";
     else ctx.fillStyle = "#031b4e";
     ctx.globalAlpha = clamp(.72 + p.seed * .28 - displacement * .001, .34, 1);
-    if (p.seed > .34) {
+    if (p.seed > (touchPerformanceMode ? .56 : .34)) {
       ctx.font = `${p.size}px SFMono-Regular, Menlo, monospace`;
       ctx.fillText(p.char, p.x, p.y);
     } else {
@@ -461,15 +490,23 @@ function drawCopies(time, dt) {
     const dy = label.y - mouse.y;
     const d = Math.hypot(dx, dy) || 1;
     const influenceRadius = mouse.radius * 1.65;
+    let desiredScale = 0;
     if (mouse.active && d < influenceRadius) {
       const proximity = 1 - d / influenceRadius;
       const force = proximity * proximity * (.34 + mouse.speed * .038);
+      desiredScale = proximity * (.72 + Math.min(mouse.speed / 85, .34));
       label.vx += dx / d * force * frameScale;
       label.vy += dy / d * force * frameScale;
       label.vx += (mouse.x - mouse.lastX) * .022 * proximity;
       label.vy += (mouse.y - mouse.lastY) * .022 * proximity;
       label.rotationVelocity += (mouse.x - mouse.lastX) * .000035 * proximity;
     }
+
+    // Local spring magnification: nearby words swell, then overshoot and settle.
+    label.scaleVelocity += (desiredScale - label.springScale) * .13 * frameScale;
+    label.scaleVelocity *= Math.pow(.72, frameScale);
+    label.springScale += label.scaleVelocity * frameScale;
+    label.springScale = clamp(label.springScale, -.08, 1.18);
 
     // A soft tether keeps the words in the composition without pinning them.
     label.vx += (targetX - label.x) * .0046 * frameScale;
@@ -484,19 +521,21 @@ function drawCopies(time, dt) {
     label.rotation *= Math.pow(.998, frameScale);
 
     const floatScale = 1 + Math.sin(time * .00063 + label.phase2) * .035 * label.depth;
+    const interactionScale = 1 + label.springScale * .72;
     ctx.save();
     ctx.translate(label.x, label.y);
     ctx.rotate(clamp(label.rotation, -.09, .09));
-    ctx.scale(floatScale, floatScale);
+    ctx.scale(floatScale * interactionScale, floatScale * interactionScale);
     const size = Math.round((18 + energy * 12) * label.scale * (.92 + label.depth * .1));
     const colour = LANGUAGE_COLOURS[label.lang] || LANGUAGE_COLOURS.EN;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = `700 ${size}px SFMono-Regular, "Hiragino Sans", "Apple SD Gothic Neo", "PingFang HK", Menlo, monospace`;
+    ctx.direction = label.lang === "AR" ? "rtl" : "ltr";
+    ctx.font = `700 ${size}px SFMono-Regular, "Noto Sans Thai", Thonburi, "Noto Naskh Arabic", "Geeza Pro", "Hiragino Sans", "Apple SD Gothic Neo", "PingFang HK", Menlo, sans-serif`;
     ctx.fillStyle = `rgba(${colour.join(",")},${clamp(.035 + energy * .045, 0, .1)})`;
     ctx.fillText(label.word, -label.vx * 3.2, -label.vy * 3.2);
     ctx.shadowColor = `rgba(${colour.join(",")},.22)`;
-    ctx.shadowBlur = 4 + label.depth * 5;
+    ctx.shadowBlur = touchPerformanceMode ? 2 : 4 + label.depth * 5;
     ctx.fillStyle = `rgba(${colour.join(",")},${clamp(label.alpha + energy * .38, 0, .9)})`;
     ctx.fillText(label.word, 0, 0);
     ctx.shadowBlur = 0;
@@ -531,7 +570,7 @@ function drawShockwaves(dt, time) {
     ctx.shadowColor = `rgba(49,92,255,${Math.max(0, wave.life) * .34})`;
     ctx.shadowBlur = 9;
     ctx.beginPath();
-    const points = 280;
+    const points = touchPerformanceMode ? 140 : 280;
     for (let i = 0; i <= points; i++) {
       const angle = i / points * Math.PI * 2;
       const travellingPhase = wave.radius * .075 - time * .0026;
@@ -617,19 +656,21 @@ function playRecording() {
   const audio = getAudioContext();
   const buffer = audioBuffers[activeIndex];
   if (audio && buffer) {
-    const source = audio.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audio.destination);
-    activeBufferSource = source;
-    source.addEventListener("ended", () => {
-      if (activeBufferSource === source) activeBufferSource = null;
-    }, { once: true });
-    document.querySelector("#audio-source").textContent = `auto : ${current().jyutping} @ ${current().start.toFixed(2)}s`;
-    source.start(0, Math.min(current().start, Math.max(0, buffer.duration - .01)));
-    audio.resume().catch(() => {
+    const startDecodedAudio = () => {
       if (requestId !== playbackId) return;
-      try { source.stop(); } catch (_) {}
-      playCachedRecording(requestId);
+      const source = audio.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audio.destination);
+      activeBufferSource = source;
+      source.addEventListener("ended", () => {
+        if (activeBufferSource === source) activeBufferSource = null;
+      }, { once: true });
+      document.querySelector("#audio-source").textContent = `auto : ${current().jyutping} @ ${current().start.toFixed(2)}s`;
+      source.start(0, Math.min(current().start, Math.max(0, buffer.duration - .01)));
+    };
+    if (audio.state === "running") startDecodedAudio();
+    else audio.resume().then(startDecodedAudio).catch(() => {
+      if (requestId === playbackId) playCachedRecording(requestId);
     });
   } else {
     playCachedRecording(requestId);
@@ -638,6 +679,11 @@ function playRecording() {
 }
 
 function animate(time) {
+  if (touchPerformanceMode && time - lastRenderedTime < 1000 / 45) {
+    requestAnimationFrame(animate);
+    return;
+  }
+  lastRenderedTime = time;
   const dt = clamp(time - lastTime || 16.67, 1, 34);
   lastTime = time;
   energy *= Math.pow(.974, dt / 16.67);
@@ -646,7 +692,7 @@ function animate(time) {
   drawCopies(time, dt);
   drawParticles(dt);
   drawShockwaves(dt, time);
-  if (time - lastHudUpdate > 80) {
+  if (time - lastHudUpdate > (touchPerformanceMode ? 160 : 80)) {
     updateHud();
     lastHudUpdate = time;
   }
@@ -655,11 +701,12 @@ function animate(time) {
 
 canvas.addEventListener("pointermove", pointerMove);
 canvas.addEventListener("pointerleave", pointerLeave);
+document.addEventListener("pointerdown", unlockAudio, { capture: true, passive: true });
 canvas.addEventListener("pointerdown", event => {
   document.body.classList.add("has-interacted");
   pointerMove(event);
-  burst(mouse.x, mouse.y, 1.1);
   playRecording();
+  burst(mouse.x, mouse.y, 1.1);
 });
 
 window.addEventListener("keydown", event => {
@@ -691,14 +738,8 @@ window.visualViewport?.addEventListener("resize", requestResize);
 document.addEventListener("fullscreenchange", () => setTimeout(requestResize, 80));
 
 buildNavigation();
-const cachedRecordings = Promise.all(recordings.map(recording => new Promise(resolve => {
-  if (recording.readyState >= 3) resolve();
-  else {
-    recording.addEventListener("canplay", resolve, { once: true });
-    recording.addEventListener("error", resolve, { once: true });
-  }
-})));
-cachedRecordings.then(prepareAudioBuffers);
+// Decode recordings as early as possible; cached HTML audio remains the fallback.
+prepareAudioBuffers();
 requestAnimationFrame(() => {
   resize();
   requestAnimationFrame(animate);
