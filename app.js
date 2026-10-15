@@ -6,7 +6,9 @@ const SOUNDS = [
       { lang: "JA", word: "シ" }, { lang: "KO", word: "시" },
       { lang: "FR", word: "SI" }, { lang: "DE", word: "SIE" },
       { lang: "ES", word: "SÍ" }, { lang: "IT", word: "SÌ" },
-      { lang: "TH", word: "ซี" }, { lang: "AR", word: "سي" }
+      { lang: "TH", word: "ซี" }, { lang: "AR", word: "سي" },
+      { lang: "RU", word: "СИ" }, { lang: "EL", word: "ΣΙ" },
+      { lang: "HE", word: "סי" }, { lang: "HI", word: "सी" }
     ]
   },
   {
@@ -16,7 +18,9 @@ const SOUNDS = [
       { lang: "JA", word: "シン" }, { lang: "KO", word: "싱" },
       { lang: "FR", word: "SIGNE" }, { lang: "DE", word: "SINN" },
       { lang: "ES", word: "SIN" }, { lang: "EN", word: "THING" },
-      { lang: "TH", word: "ซิง" }, { lang: "AR", word: "سينغ" }
+      { lang: "TH", word: "ซิง" }, { lang: "AR", word: "سينغ" },
+      { lang: "RU", word: "СИНГ" }, { lang: "EL", word: "ΣΙΝΓΚ" },
+      { lang: "HE", word: "סינג" }, { lang: "HI", word: "सिंग" }
     ]
   },
   {
@@ -26,7 +30,9 @@ const SOUNDS = [
       { lang: "JA", word: "マイ" }, { lang: "KO", word: "마이" },
       { lang: "FR", word: "MAILLE" }, { lang: "DE", word: "MAI" },
       { lang: "IT", word: "MAI" }, { lang: "EN", word: "MAI" },
-      { lang: "TH", word: "ไหม" }, { lang: "AR", word: "ماي" }
+      { lang: "TH", word: "ไหม" }, { lang: "AR", word: "ماي" },
+      { lang: "RU", word: "МАЙ" }, { lang: "EL", word: "ΜΑΪ" },
+      { lang: "HE", word: "מאי" }, { lang: "HI", word: "माई" }
     ]
   },
   {
@@ -36,7 +42,9 @@ const SOUNDS = [
       { lang: "JA", word: "サム" }, { lang: "KO", word: "삼" },
       { lang: "FR", word: "SOMME" }, { lang: "DE", word: "SAM" },
       { lang: "EN", word: "SAM" }, { lang: "ES", word: "SAM" },
-      { lang: "TH", word: "ซัม" }, { lang: "AR", word: "سام" }
+      { lang: "TH", word: "ซัม" }, { lang: "AR", word: "سام" },
+      { lang: "RU", word: "САМ" }, { lang: "EL", word: "ΣΑΜ" },
+      { lang: "HE", word: "סאם" }, { lang: "HI", word: "सम" }
     ]
   },
   {
@@ -46,7 +54,9 @@ const SOUNDS = [
       { lang: "JA", word: "ファン" }, { lang: "KO", word: "판" },
       { lang: "FR", word: "FAN" }, { lang: "DE", word: "FAHNE" },
       { lang: "ES", word: "FAN" }, { lang: "EN", word: "FINE" },
-      { lang: "TH", word: "ฟาน" }, { lang: "AR", word: "فان" }
+      { lang: "TH", word: "ฟาน" }, { lang: "AR", word: "فان" },
+      { lang: "RU", word: "ФАН" }, { lang: "EL", word: "ΦΑΝ" },
+      { lang: "HE", word: "פאן" }, { lang: "HI", word: "फान" }
     ]
   }
 ];
@@ -60,11 +70,17 @@ const LANGUAGE_COLOURS = {
   ES: [86, 207, 229],
   IT: [41, 163, 190],
   TH: [0, 150, 210],
-  AR: [92, 72, 210]
+  AR: [92, 72, 210],
+  RU: [20, 112, 176],
+  EL: [121, 80, 214],
+  HE: [0, 163, 190],
+  HI: [55, 96, 224]
 };
 
 const canvas = document.querySelector("#projection");
 const ctx = canvas.getContext("2d", { alpha: false });
+const backgroundLayer = document.createElement("canvas");
+const backgroundCtx = backgroundLayer.getContext("2d", { alpha: false });
 const nav = document.querySelector("#sound-nav");
 const fullscreenButton = document.querySelector("#fullscreen");
 const touchDevice = navigator.maxTouchPoints > 0
@@ -81,6 +97,11 @@ let shockwaves = [];
 let lastTime = 0;
 let lastHudUpdate = 0;
 let energy = 0;
+let eruptionStartedAt = -Infinity;
+let eruptionSerial = 0;
+let glyphOriginX = 0;
+let glyphOriginY = 0;
+let glyphRenderSize = 0;
 let pointerTimer;
 let activeRecording = null;
 let activeBufferSource = null;
@@ -89,18 +110,18 @@ let audioContext = null;
 let lastRenderedTime = 0;
 let renderProfile = {
   name: "high",
-  dpr: 2,
-  particleDivisor: 225,
-  minParticles: 3200,
-  maxParticles: 7200,
+  dpr: 1.4,
+  particleDivisor: 390,
+  minParticles: 1900,
+  maxParticles: 3400,
   scanlineStep: 4,
-  noiseCount: 40,
-  textThreshold: .34,
-  labelShadow: 7,
-  wavePoints: 280,
-  maxWaves: 4,
+  noiseCount: 24,
+  textThreshold: .42,
+  labelShadow: 3,
+  wavePoints: 180,
+  maxWaves: 2,
   fps: 60,
-  hudInterval: 80
+  hudInterval: 150
 };
 
 const mouse = {
@@ -115,6 +136,21 @@ const mouse = {
 
 const current = () => SOUNDS[activeIndex];
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+function transformationState(time) {
+  if (!Number.isFinite(eruptionStartedAt)) return { wave: 0, copy: 0 };
+  const elapsed = time - eruptionStartedAt;
+  const waveAttack = clamp(elapsed / 380, 0, 1);
+  const copyAttack = clamp(elapsed / 380, 0, 1);
+  const release = clamp((elapsed - 720) / 1220, 0, 1);
+  const waveEase = 1 - Math.pow(1 - waveAttack, 3);
+  const copyEase = 1 - Math.pow(1 - copyAttack, 3);
+  const releaseEase = 1 - Math.pow(1 - release, 2.35);
+  return {
+    wave: waveEase * (1 - releaseEase),
+    copy: copyEase * (1 - releaseEase)
+  };
+}
 
 function getLayout() {
   const compact = width <= 700 || height <= 500;
@@ -140,43 +176,52 @@ function chooseRenderProfile() {
 
   if (shortSide < 620 || (touchDevice && shortSide < 760)) {
     return {
-      name: "mobile", dpr: 1.15, particleDivisor: 260,
-      minParticles: 2000, maxParticles: 2600, scanlineStep: 10,
-      noiseCount: 12, textThreshold: .62, labelShadow: 1.5,
-      wavePoints: 100, maxWaves: 2, fps: 40, hudInterval: 200
+      name: "mobile", dpr: 1.1, particleDivisor: 430,
+      minParticles: 950, maxParticles: 1450, scanlineStep: 10,
+      noiseCount: 8, textThreshold: .7, labelShadow: 1,
+      wavePoints: 72, maxWaves: 1, fps: 40, hudInterval: 200
     };
   }
   if (touchDevice) {
     return {
-      name: "tablet", dpr: 1.35, particleDivisor: 380,
-      minParticles: 2400, maxParticles: 3400, scanlineStep: 8,
-      noiseCount: 20, textThreshold: .56, labelShadow: 2,
-      wavePoints: 140, maxWaves: 2, fps: 45, hudInterval: 160
+      name: "tablet", dpr: 1.2, particleDivisor: 520,
+      minParticles: 1250, maxParticles: 2100, scanlineStep: 8,
+      noiseCount: 12, textThreshold: .64, labelShadow: 1.5,
+      wavePoints: 96, maxWaves: 1, fps: 45, hudInterval: 160
     };
   }
   if (cores <= 4 || memory <= 4 || area > 2200000) {
     return {
-      name: "balanced", dpr: 1.5, particleDivisor: 300,
-      minParticles: 2800, maxParticles: 5200, scanlineStep: 6,
-      noiseCount: 28, textThreshold: .45, labelShadow: 4,
-      wavePoints: 200, maxWaves: 3, fps: 50, hudInterval: 120
+      name: "balanced", dpr: 1.25, particleDivisor: 470,
+      minParticles: 1700, maxParticles: 3000, scanlineStep: 6,
+      noiseCount: 16, textThreshold: .54, labelShadow: 3,
+      wavePoints: 120, maxWaves: 2, fps: 50, hudInterval: 170
     };
   }
   return {
-    name: "high", dpr: 2, particleDivisor: 225,
-    minParticles: 3200, maxParticles: 7200, scanlineStep: 4,
-    noiseCount: 40, textThreshold: .34, labelShadow: 7,
-    wavePoints: 280, maxWaves: 4, fps: 60, hudInterval: 80
+    name: "high", dpr: 1.4, particleDivisor: 390,
+    minParticles: 1900, maxParticles: 3400, scanlineStep: 5,
+    noiseCount: 20, textThreshold: .46, labelShadow: 3,
+    wavePoints: 150, maxWaves: 2, fps: 60, hudInterval: 150
   };
 }
 
 const recordings = SOUNDS.map(sound => {
-  const recording = new Audio(sound.audio);
-  recording.preload = "auto";
-  recording.load();
+  const recording = new Audio();
+  recording.preload = "none";
+  recording.src = sound.audio;
   return recording;
 });
 const audioBuffers = Array(SOUNDS.length).fill(null);
+const primedRecordings = new Set();
+let audioPreparationStarted = false;
+
+function primeRecording(index) {
+  if (primedRecordings.has(index)) return;
+  primedRecordings.add(index);
+  recordings[index].preload = "auto";
+  recordings[index].load();
+}
 
 function getAudioContext() {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -226,25 +271,52 @@ function detectVoiceStart(buffer) {
   return 0;
 }
 
-async function prepareAudioBuffers() {
-  const audio = getAudioContext();
-  if (!audio) return;
-  document.querySelector("#audio-source").textContent = "recording : analysing";
-  await Promise.all(SOUNDS.map(async (sound, index) => {
-    try {
-      const response = await fetch(sound.audio);
-      if (!response.ok) throw new Error(`Audio ${response.status}`);
-      const buffer = await audio.decodeAudioData(await response.arrayBuffer());
-      audioBuffers[index] = buffer;
-      sound.start = detectVoiceStart(buffer);
-    } catch (_) {
-      // file:// pages often block fetch; cached HTML audio remains the fallback.
+function prepareAudioBuffers() {
+  if (audioPreparationStarted) return;
+  audioPreparationStarted = true;
+  const order = [activeIndex, ...SOUNDS.map((_, index) => index).filter(index => index !== activeIndex)];
+  let cursor = 0;
+
+  const scheduleIdle = callback => {
+    if ("requestIdleCallback" in window) window.requestIdleCallback(callback, { timeout: 900 });
+    else setTimeout(callback, 220);
+  };
+
+  const prepareNext = () => {
+    if (cursor >= order.length) {
+      const detected = audioBuffers.filter(Boolean).length;
+      document.querySelector("#audio-source").textContent = detected
+        ? `auto-trim : ready ${detected}/5`
+        : "recording : cached / trim 0.06s";
+      return;
     }
-  }));
-  const detected = audioBuffers.filter(Boolean).length;
-  document.querySelector("#audio-source").textContent = detected
-    ? `auto-trim : ready ${detected}/5`
-    : "recording : cached / trim 0.06s";
+    const index = order[cursor++];
+    const sound = SOUNDS[index];
+    primeRecording(index);
+    document.querySelector("#audio-source").textContent = `loading : ${cursor}/5`;
+
+    const audio = getAudioContext();
+    if (!audio) {
+      scheduleIdle(prepareNext);
+      return;
+    }
+    fetch(sound.audio)
+      .then(response => {
+        if (!response.ok) throw new Error(`Audio ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then(data => audio.decodeAudioData(data))
+      .then(buffer => {
+        audioBuffers[index] = buffer;
+        sound.start = detectVoiceStart(buffer);
+      })
+      .catch(() => {
+        // file:// pages often block fetch; cached HTML audio remains the fallback.
+      })
+      .finally(() => scheduleIdle(prepareNext));
+  };
+
+  scheduleIdle(prepareNext);
 }
 
 function buildNavigation() {
@@ -278,14 +350,18 @@ function resize() {
   const viewportHeight = window.visualViewport?.height || window.innerHeight;
   document.documentElement.style.setProperty("--app-height", `${Math.round(viewportHeight)}px`);
   const rect = canvas.getBoundingClientRect();
-  width = rect.width;
-  height = rect.height;
+  const nextWidth = rect.width;
+  const nextHeight = rect.height;
+  if (canvas.width && Math.abs(nextWidth - width) < 1 && Math.abs(nextHeight - height) < 1) return;
+  width = nextWidth;
+  height = nextHeight;
   renderProfile = chooseRenderProfile();
   document.body.dataset.quality = renderProfile.name;
   dpr = Math.min(window.devicePixelRatio || 1, renderProfile.dpr);
   canvas.width = Math.round(width * dpr);
   canvas.height = Math.round(height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  buildBackgroundLayer();
   mouse.radius = clamp(Math.min(width, height) * .19, 120, 260);
   document.querySelector("#radius").textContent = Math.round(mouse.radius);
   buildGlyph();
@@ -305,6 +381,8 @@ function buildGlyph() {
   off.font = `900 ${size * .79}px "PingFang HK", "Noto Sans CJK HK", sans-serif`;
   off.fillText(current().char, size / 2, size / 2 + size * .03);
 
+  glyphRenderSize = size;
+
   const targetCount = clamp(
     Math.round((width * height) / renderProfile.particleDivisor),
     renderProfile.minParticles,
@@ -314,22 +392,65 @@ function buildGlyph() {
   const pixels = off.getImageData(0, 0, size, size).data;
   const originX = layout.cx - size / 2;
   const originY = layout.cy - size / 2;
+  glyphOriginX = originX;
+  glyphOriginY = originY;
   const prior = particles;
   const next = [];
-  const alphabet = `${current().copies.join("")}0123456789#/.`;
+  const responsePool = current().responses || current().copies.map(word => ({ lang: "EN", word }));
+  const systemSymbols = Array.from("0123456789#/.");
 
   for (let y = 0; y < size; y += step) {
     for (let x = 0; x < size; x += step) {
       if (pixels[(y * size + x) * 4 + 3] > 80) {
         const old = prior[next.length];
+        const response = responsePool[next.length % responsePool.length];
+        const responseCharacters = Array.from(response.word);
+        const sourceX = originX + x;
+        const sourceY = originY + y;
+        const sourceAngle = Math.atan2(sourceY - layout.cy, sourceX - layout.cx);
+        const burstAngle = Number.isFinite(sourceAngle)
+          ? sourceAngle + (Math.random() - .5) * 1.18
+          : Math.random() * Math.PI * 2;
+        const burstCos = Math.cos(burstAngle);
+        const burstSin = Math.sin(burstAngle);
+        const margin = Math.max(18, Math.min(width, height) * .025);
+        const edgeX = Math.abs(burstCos) < .001
+          ? Infinity
+          : (burstCos > 0 ? width - margin - layout.cx : layout.cx - margin) / Math.abs(burstCos);
+        const edgeY = Math.abs(burstSin) < .001
+          ? Infinity
+          : (burstSin > 0 ? height - margin - layout.cy : layout.cy - margin) / Math.abs(burstSin);
+        const edgeDistance = Math.max(40, Math.min(edgeX, edgeY));
+        // Keep the destination inside the viewport. The apparent extra distance
+        // comes from perspective at draw time, rather than unstable velocity.
+        const targetRadius = edgeDistance * (layout.compact
+          ? .48 + Math.random() * .3
+          : .64 + Math.random() * .27);
         next.push({
           ox: originX + x,
           oy: originY + y,
-          x: old?.x ?? originX + x + (Math.random() - .5) * 80,
-          y: old?.y ?? originY + y + (Math.random() - .5) * 80,
+          // The first frame starts as a complete glyph. Randomising these
+          // coordinates made the page visibly assemble itself on load.
+          x: old?.x ?? sourceX,
+          y: old?.y ?? sourceY,
           vx: old?.vx ?? 0,
           vy: old?.vy ?? 0,
-          char: alphabet[Math.floor(Math.random() * alphabet.length)],
+          // Cycle through languages before selecting a character so long Latin
+          // words do not statistically overpower shorter non-Latin scripts.
+          char: Math.random() < .17
+            ? systemSymbols[Math.floor(Math.random() * systemSymbols.length)]
+            : responseCharacters[Math.floor(Math.random() * responseCharacters.length)],
+          copyWord: response.word,
+          copyLang: response.lang,
+          copyThreshold: Math.random() * .78,
+          wordSeed: Math.random(),
+          burstDelay: Math.random() * 55,
+          burstSerial: old?.burstSerial ?? eruptionSerial,
+          burstX: layout.cx + burstCos * targetRadius,
+          burstY: layout.cy + burstSin * targetRadius,
+          depth: .42 + Math.random() * 1.08,
+          scatter: 0,
+          flow: old?.flow ?? 0,
           seed: Math.random(),
           size: renderProfile.name === "mobile" || renderProfile.name === "tablet"
             ? 6
@@ -351,25 +472,45 @@ function buildLabels() {
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   const previous = labels;
   const fieldSize = Math.min(width, height);
+  const scriptForwardLanguages = new Set(["JA", "KO", "TH", "AR", "RU", "EL", "HE", "HI"]);
   labels = responses.map((response, i) => {
     const angle = -1.3 + i * goldenAngle;
-    const radius = fieldSize * (layout.portrait
-      ? (.22 + (i % 3) * .04)
-      : (.27 + (i % 3) * .055));
-    const x = cx + Math.cos(angle) * radius * 1.22;
-    const y = cy + Math.sin(angle) * radius * .84;
+    const directionX = Math.cos(angle);
+    const directionY = Math.sin(angle);
+    const margin = Math.max(30, Math.min(width, height) * .055);
+    const edgeX = Math.abs(directionX) < .001
+      ? Infinity
+      : (directionX > 0 ? width - margin - cx : cx - margin) / Math.abs(directionX);
+    const edgeY = Math.abs(directionY) < .001
+      ? Infinity
+      : (directionY > 0 ? height - margin - cy : cy - margin) / Math.abs(directionY);
+    const edgeDistance = Math.max(fieldSize * .3, Math.min(edgeX, edgeY));
+    const radius = edgeDistance * (layout.compact
+      ? .48 + (i % 4) * .075
+      : .7 + (i % 4) * .075);
+    const x = cx + directionX * radius;
+    const y = cy + directionY * radius;
+    const homeRadius = layout.glyphSize * (.025 + (i % 3) * .009);
+    const homeX = layout.cx + Math.cos(angle) * homeRadius;
+    const homeY = layout.cy + Math.sin(angle) * homeRadius * .72;
     const old = previous.find(label => label.lang === response.lang && label.word === response.word)
       || previous[i];
     return {
       ...response,
-      x: old?.x ?? x,
-      y: old?.y ?? y,
+      x: old?.x ?? homeX,
+      y: old?.y ?? homeY,
+      homeX,
+      homeY,
       baseX: x,
       baseY: y,
       vx: old?.vx ?? (Math.random() - .5) * .18,
       vy: old?.vy ?? (Math.random() - .5) * .18,
       alpha: response.lang === "EN" ? .34 : .25,
-      scale: response.lang === "EN" ? 1 : .78 + (i % 2) * .08,
+      scale: response.lang === "EN"
+        ? .8
+        : scriptForwardLanguages.has(response.lang)
+          ? .96 + (i % 3) * .045
+          : .82 + (i % 2) * .04,
       depth: .68 + (i % 4) * .1,
       orbitX: fieldSize * (.026 + (i % 4) * .008),
       orbitY: fieldSize * (.018 + ((i + 2) % 3) * .009),
@@ -380,7 +521,9 @@ function buildLabels() {
       rotation: old?.rotation ?? (Math.random() - .5) * .025,
       rotationVelocity: old?.rotationVelocity ?? 0,
       springScale: old?.springScale ?? 0,
-      scaleVelocity: old?.scaleVelocity ?? 0
+      scaleVelocity: old?.scaleVelocity ?? 0,
+      burstDelay: i * 18,
+      burstSerial: old?.burstSerial ?? eruptionSerial
     };
   });
 }
@@ -414,6 +557,8 @@ function pointerLeave() {
 }
 
 function burst(x, y, strength = 1) {
+  eruptionStartedAt = performance.now();
+  eruptionSerial += 1;
   while (shockwaves.length >= renderProfile.maxWaves) shockwaves.shift();
   shockwaves.push({
     x,
@@ -429,101 +574,176 @@ function burst(x, y, strength = 1) {
     const distance = Math.hypot(dx, dy) || 1;
     const range = Math.min(width, height) * .43;
     if (distance < range) {
-      const force = (1 - distance / range) * 24 * strength;
+      // A very small physical kick gives the click an immediate response. The
+      // main eruption follows the controlled spring target in updateParticle.
+      const force = (1 - distance / range) * 1.15 * strength;
       p.vx += dx / distance * force;
       p.vy += dy / distance * force;
-    }
-  });
-  labels.forEach(label => {
-    const dx = label.x - x;
-    const dy = label.y - y;
-    const distance = Math.hypot(dx, dy) || 1;
-    const range = Math.min(width, height) * .58;
-    if (distance < range) {
-      const force = Math.pow(1 - distance / range, 1.35) * 8.5 * strength;
-      const proximity = 1 - distance / range;
-      label.vx += dx / distance * force;
-      label.vy += dy / distance * force;
-      label.rotationVelocity += ((dx / distance) * .003 + (Math.random() - .5) * .012) * strength;
-      label.scaleVelocity += proximity * .42 * strength;
     }
   });
   energy = 1;
 }
 
-function updateParticle(p, dt) {
+function updateParticle(p, dt, time) {
   const scale = dt / 16.67;
+  p.flow *= Math.pow(.94, scale);
+  const burstElapsed = Number.isFinite(eruptionStartedAt)
+    ? time - eruptionStartedAt
+    : -1;
+  const explodeAt = p.burstDelay;
+  const scatterAttack = clamp((burstElapsed - explodeAt) / 420, 0, 1);
+  const scatterReturn = clamp((burstElapsed - 610 - p.burstDelay * .08) / 1080, 0, 1);
+  const scatterAttackEase = 1
+    - Math.exp(-4.15 * scatterAttack) * Math.cos(scatterAttack * Math.PI * 3.3);
+  const scatterReturnEase = 1 - Math.pow(1 - scatterReturn, 2.45);
+  const depthSurge = Math.sin(Math.max(0, burstElapsed - explodeAt) * .0105 + p.depth * 2.4)
+    * .045 * (1 - scatterReturnEase);
+  const scatter = clamp((scatterAttackEase + depthSurge) * (1 - scatterReturnEase), 0, 1.1);
+  p.scatter = scatter;
+  if (eruptionSerial > 0 && p.burstSerial !== eruptionSerial
+      && burstElapsed >= explodeAt && burstElapsed < 1500) {
+    const dx = p.ox - (glyphOriginX + glyphRenderSize / 2);
+    const dy = p.oy - (glyphOriginY + glyphRenderSize / 2);
+    const distance = Math.hypot(dx, dy) || 1;
+    const force = .45 + p.seed * .7;
+    p.vx += dx / distance * force;
+    p.vy += dy / distance * force;
+    p.burstSerial = eruptionSerial;
+  }
   if (mouse.active) {
     const dx = p.x - mouse.x;
     const dy = p.y - mouse.y;
     const distance = Math.hypot(dx, dy) || 1;
     if (distance < mouse.radius) {
       const proximity = 1 - distance / mouse.radius;
-      const force = proximity * proximity * (2.6 + mouse.speed * .16);
+      p.flow = Math.max(p.flow, proximity * (.72 + Math.min(mouse.speed / 45, .65)));
+      const force = proximity * proximity * (2.9 + mouse.speed * .2);
       p.vx += dx / distance * force * scale;
       p.vy += dy / distance * force * scale;
-      p.vx += (mouse.x - mouse.lastX) * -.018 * proximity;
-      p.vy += (mouse.y - mouse.lastY) * -.018 * proximity;
+      const cursorX = mouse.x - mouse.lastX;
+      const cursorY = mouse.y - mouse.lastY;
+      p.vx += cursorX * -.052 * proximity;
+      p.vy += cursorY * -.052 * proximity;
+      const swirlDirection = p.seed > .5 ? 1 : -1;
+      const swirl = mouse.speed * .018 * proximity * swirlDirection;
+      p.vx += -dy / distance * swirl;
+      p.vy += dx / distance * swirl;
     }
   }
 
-  p.vx += (p.ox - p.x) * .017 * scale;
-  p.vy += (p.oy - p.y) * .017 * scale;
-  const drag = Math.pow(.905, scale);
+  const targetX = p.ox + (p.burstX - p.ox) * scatter;
+  const targetY = p.oy + (p.burstY - p.oy) * scatter;
+  // A compact, critically damped spring follows the animated destination.
+  // This creates a visible overshoot without allowing particles to leave the
+  // screen or pause while a large ballistic force settles.
+  const baseTether = .031 + (1 - Math.min(scatter, 1)) * .014;
+  const returnTether = Math.max(.0045, baseTether * (1 - p.flow * .84));
+  p.vx += (targetX - p.x) * returnTether * scale;
+  p.vy += (targetY - p.y) * returnTether * scale;
+  const drag = Math.pow(.82 + Math.min(p.flow, 1) * .1, scale);
   p.vx *= drag;
   p.vy *= drag;
   p.x += p.vx * scale;
   p.y += p.vy * scale;
 }
 
-function drawBackground(time) {
+function buildBackgroundLayer() {
+  backgroundLayer.width = canvas.width;
+  backgroundLayer.height = canvas.height;
+  backgroundCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const layout = getLayout();
-  const waterField = ctx.createRadialGradient(
+  const waterField = backgroundCtx.createRadialGradient(
     layout.cx, layout.cy - height * .02, 0,
     layout.cx, layout.cy - height * .02, Math.max(width, height) * .8
   );
   waterField.addColorStop(0, "#ffffff");
   waterField.addColorStop(.58, "#f9fcff");
   waterField.addColorStop(1, "#edf5fb");
-  ctx.fillStyle = waterField;
-  ctx.fillRect(0, 0, width, height);
+  backgroundCtx.fillStyle = waterField;
+  backgroundCtx.fillRect(0, 0, width, height);
 
-  ctx.strokeStyle = "rgba(23,76,156,.032)";
-  ctx.lineWidth = 1;
+  backgroundCtx.strokeStyle = "rgba(23,76,156,.032)";
+  backgroundCtx.lineWidth = 1;
   const scanlineStep = renderProfile.scanlineStep;
   for (let y = 0; y < height; y += scanlineStep) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y + Math.sin(time * .001 + y) * .18);
-    ctx.stroke();
+    backgroundCtx.beginPath();
+    backgroundCtx.moveTo(0, y);
+    backgroundCtx.lineTo(width, y + Math.sin(y * .19) * .18);
+    backgroundCtx.stroke();
   }
 
   const noiseCount = renderProfile.noiseCount;
   for (let i = 0; i < noiseCount; i++) {
-    const x = (i * 193.71 + time * .009) % width;
+    const x = (i * 193.71 + 37) % width;
     const y = (i * 83.11) % height;
-    ctx.fillStyle = i % 7 === 0 ? "rgba(49,92,255,.20)" : "rgba(23,76,156,.07)";
-    ctx.fillRect(x, y, i % 5 === 0 ? 8 : 2, 1);
+    backgroundCtx.fillStyle = i % 7 === 0 ? "rgba(49,92,255,.20)" : "rgba(23,76,156,.07)";
+    backgroundCtx.fillRect(x, y, i % 5 === 0 ? 8 : 2, 1);
   }
 }
 
-function drawParticles(dt) {
+function drawBackground() {
+  ctx.drawImage(backgroundLayer, 0, 0, width, height);
+}
+
+function drawParticles(dt, time) {
+  const state = transformationState(time);
+  const wordCutoff = renderProfile.name === "mobile" || renderProfile.name === "tablet" ? .91 : .86;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   for (const p of particles) {
-    updateParticle(p, dt);
+    updateParticle(p, dt, time);
     const displacement = Math.hypot(p.x - p.ox, p.y - p.oy);
-    if (displacement > 82 && p.seed > .52) ctx.fillStyle = "#56cfe5";
+    const perspective = 1 + p.scatter * (.025 + p.depth * .045);
+    const centreX = glyphOriginX + glyphRenderSize / 2;
+    const centreY = glyphOriginY + glyphRenderSize / 2;
+    const renderX = centreX + (p.x - centreX) * perspective;
+    const renderY = centreY + (p.y - centreY) * perspective;
+    const renderScale = 1 + p.scatter * (.22 + p.depth * .42) + p.flow * .34;
+    if (p.flow > .2 && p.seed > .5) ctx.fillStyle = "#56dff0";
+    else if (p.flow > .12) ctx.fillStyle = "#315cff";
+    else if (displacement > 82 && p.seed > .52) ctx.fillStyle = "#56cfe5";
     else if (displacement > 48 && p.seed > .43) ctx.fillStyle = "#315cff";
     else if (displacement > 20 && p.seed > .55) ctx.fillStyle = "#2e83cf";
     else ctx.fillStyle = "#031b4e";
-    ctx.globalAlpha = clamp(.72 + p.seed * .28 - displacement * .001, .34, 1);
-    if (p.seed > renderProfile.textThreshold) {
-      ctx.font = `${p.size}px SFMono-Regular, Menlo, monospace`;
-      ctx.fillText(p.char, p.x, p.y);
+    const sourceAlpha = clamp(.72 + p.seed * .28 + p.flow * .16 - displacement * .001, .34, 1)
+      * (1 - state.copy * .62);
+    if (p.flow > .06 && p.seed > .36) {
+      const trailLength = 1.8 + p.flow * 3.4;
+      ctx.globalAlpha = clamp(sourceAlpha * p.flow * .32, 0, .3);
+      ctx.fillStyle = p.seed > .62 ? "#56dff0" : "#6558e8";
+      const grain = (1 + p.seed * 1.8) * renderScale;
+      ctx.fillRect(renderX - p.vx * trailLength, renderY - p.vy * trailLength, grain, grain);
+    }
+    const becomesCopy = p.wordSeed > wordCutoff && state.copy > p.copyThreshold;
+    if (becomesCopy) {
+      const colour = LANGUAGE_COLOURS[p.copyLang] || LANGUAGE_COLOURS.EN;
+      const wordAlpha = clamp((state.copy - p.copyThreshold) * 2.8, 0, 1)
+        * clamp(1 - displacement * .0007, .35, 1);
+      ctx.font = `700 ${Math.max(5, p.size * .86 * renderScale)}px SFMono-Regular, "Noto Sans Thai", Thonburi, "Noto Naskh Arabic", "Geeza Pro", "Noto Sans Hebrew", "Arial Hebrew", "Noto Sans Devanagari", "Kohinoor Devanagari", "Hiragino Sans", "Apple SD Gothic Neo", Menlo, sans-serif`;
+      ctx.direction = p.copyLang === "AR" || p.copyLang === "HE" ? "rtl" : "ltr";
+      const trailX = renderX - p.vx * (.28 + p.depth * .18);
+      const trailY = renderY - p.vy * (.28 + p.depth * .18);
+      ctx.globalAlpha = wordAlpha * .28;
+      ctx.fillStyle = "#56dfef";
+      ctx.fillText(p.copyWord, trailX - 1.15 * state.copy, trailY);
+      ctx.globalAlpha = wordAlpha;
+      ctx.fillStyle = `rgb(${colour.join(",")})`;
+      const particleGlow = renderProfile.name === "high" && p.seed > .9;
+      if (particleGlow) {
+        ctx.shadowColor = `rgba(${colour.join(",")},${.1 + p.scatter * .16})`;
+        ctx.shadowBlur = p.scatter * (1.5 + p.depth * 3);
+      }
+      ctx.fillText(p.copyWord, renderX, renderY);
+      if (particleGlow) ctx.shadowBlur = 0;
+      ctx.direction = "ltr";
+    } else if (p.seed > renderProfile.textThreshold) {
+      ctx.globalAlpha = sourceAlpha;
+      ctx.font = `${p.size * renderScale}px SFMono-Regular, "Noto Sans Thai", Thonburi, "Noto Naskh Arabic", "Geeza Pro", "Noto Sans Hebrew", "Arial Hebrew", "Noto Sans Devanagari", "Kohinoor Devanagari", "Hiragino Sans", "Apple SD Gothic Neo", Menlo, sans-serif`;
+      ctx.fillText(p.char, renderX, renderY);
     } else {
-      const dot = 1.4 + p.seed * 3.2;
-      ctx.fillRect(p.x, p.y, dot, dot);
+      ctx.globalAlpha = sourceAlpha;
+      const dot = (1.4 + p.seed * 3.2) * renderScale;
+      ctx.fillRect(renderX, renderY, dot, dot);
     }
   }
   ctx.globalAlpha = 1;
@@ -532,26 +752,55 @@ function drawParticles(dt) {
 function drawCopies(time, dt) {
   const frameScale = dt / 16.67;
   labels.forEach(label => {
-    const targetX = label.baseX
-      + Math.sin(time * label.speedX + label.phase) * label.orbitX
-      + Math.sin(time * .000071 + label.phase2) * label.orbitX * .38;
-    const targetY = label.baseY
-      + Math.cos(time * label.speedY + label.phase2) * label.orbitY
-      + Math.sin(time * .00011 + label.phase) * label.orbitY * .44;
+    // Before the first click there is no eruption clock. Use a negative idle
+    // value instead of Infinity so the canvas keeps rendering the source glyph.
+    const elapsed = Number.isFinite(eruptionStartedAt)
+      ? time - eruptionStartedAt - label.burstDelay
+      : -1;
+    const attack = clamp(elapsed / 390, 0, 1);
+    const returnProgress = clamp((elapsed - 640) / 1080, 0, 1);
+    const attackEase = 1 - Math.exp(-4.2 * attack) * Math.cos(attack * Math.PI * 3.25);
+    const returnEase = 1 - Math.pow(1 - returnProgress, 2.35);
+    const springExtension = 1 + Math.sin(Math.max(0, elapsed) * .012 + label.phase) * .06 * (1 - returnEase);
+    const spread = clamp(attackEase * (1 - returnEase), 0, 1.1);
+    const reveal = clamp(attackEase * Math.pow(1 - returnEase, .72), 0, 1);
+    const currentX = label.homeX + (label.baseX - label.homeX) * spread * springExtension;
+    const currentY = label.homeY + (label.baseY - label.homeY) * spread * springExtension;
+    const targetX = currentX
+      + Math.sin(time * label.speedX + label.phase) * label.orbitX * spread
+      + Math.sin(time * .000071 + label.phase2) * label.orbitX * .38 * spread;
+    const targetY = currentY
+      + Math.cos(time * label.speedY + label.phase2) * label.orbitY * spread
+      + Math.sin(time * .00011 + label.phase) * label.orbitY * .44 * spread;
 
-    // An uneven current keeps every word moving even while the viewer is still.
-    label.vx += Math.sin(label.y * .0105 + time * .00052 + label.phase) * .021 * label.depth * frameScale;
-    label.vy += Math.cos(label.x * .009 - time * .00043 + label.phase2) * .016 * label.depth * frameScale;
+    // Each language leaves the character a fraction later, producing a
+    // progressive multilingual eruption instead of one rigid explosion.
+    if (eruptionSerial > 0 && elapsed >= 0 && elapsed < 4200 && label.burstSerial !== eruptionSerial) {
+      const outwardX = label.baseX - label.homeX;
+      const outwardY = label.baseY - label.homeY;
+      const outwardLength = Math.hypot(outwardX, outwardY) || 1;
+      const kick = .62 + label.depth * .52;
+      label.vx += outwardX / outwardLength * kick;
+      label.vy += outwardY / outwardLength * kick;
+      label.rotationVelocity += (Math.random() - .5) * .016;
+      label.scaleVelocity += .5;
+      label.burstSerial = eruptionSerial;
+    }
+
+    // The current grows with the reveal and disappears as words return home.
+    label.vx += Math.sin(label.y * .0105 + time * .00052 + label.phase) * .021 * label.depth * spread * frameScale;
+    label.vy += Math.cos(label.x * .009 - time * .00043 + label.phase2) * .016 * label.depth * spread * frameScale;
 
     const dx = label.x - mouse.x;
     const dy = label.y - mouse.y;
     const d = Math.hypot(dx, dy) || 1;
     const influenceRadius = mouse.radius * 1.65;
-    let desiredScale = 0;
-    if (mouse.active && d < influenceRadius) {
+    let desiredScale = spread * (.2 + label.depth * .25)
+      + Math.max(0, Math.sin(Math.max(0, elapsed) * .014 + label.phase2)) * .12 * reveal;
+    if (spread > .03 && mouse.active && d < influenceRadius) {
       const proximity = 1 - d / influenceRadius;
       const force = proximity * proximity * (.34 + mouse.speed * .038);
-      desiredScale = proximity * (.72 + Math.min(mouse.speed / 85, .34));
+      desiredScale += proximity * (.72 + Math.min(mouse.speed / 85, .34));
       label.vx += dx / d * force * frameScale;
       label.vy += dy / d * force * frameScale;
       label.vx += (mouse.x - mouse.lastX) * .022 * proximity;
@@ -565,10 +814,11 @@ function drawCopies(time, dt) {
     label.springScale += label.scaleVelocity * frameScale;
     label.springScale = clamp(label.springScale, -.08, 1.18);
 
-    // A soft tether keeps the words in the composition without pinning them.
-    label.vx += (targetX - label.x) * .0046 * frameScale;
-    label.vy += (targetY - label.y) * .0046 * frameScale;
-    const drag = Math.pow(.968, frameScale);
+    // A stronger return tether lets every word dissolve back into the source.
+    const tether = .03 + (1 - Math.min(spread, 1)) * .016;
+    label.vx += (targetX - label.x) * tether * frameScale;
+    label.vy += (targetY - label.y) * tether * frameScale;
+    const drag = Math.pow(.85, frameScale);
     label.vx *= drag;
     label.vy *= drag;
     label.rotationVelocity *= Math.pow(.94, frameScale);
@@ -578,7 +828,8 @@ function drawCopies(time, dt) {
     label.rotation *= Math.pow(.998, frameScale);
 
     const floatScale = 1 + Math.sin(time * .00063 + label.phase2) * .035 * label.depth;
-    const interactionScale = 1 + label.springScale * .72;
+    const depthScale = 1 + spread * (.18 + label.depth * .3);
+    const interactionScale = (1 + label.springScale * .72) * depthScale;
     ctx.save();
     ctx.translate(label.x, label.y);
     ctx.rotate(clamp(label.rotation, -.09, .09));
@@ -587,17 +838,27 @@ function drawCopies(time, dt) {
     const colour = LANGUAGE_COLOURS[label.lang] || LANGUAGE_COLOURS.EN;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.direction = label.lang === "AR" ? "rtl" : "ltr";
-    ctx.font = `700 ${size}px SFMono-Regular, "Noto Sans Thai", Thonburi, "Noto Naskh Arabic", "Geeza Pro", "Hiragino Sans", "Apple SD Gothic Neo", "PingFang HK", Menlo, sans-serif`;
-    ctx.fillStyle = `rgba(${colour.join(",")},${clamp(.035 + energy * .045, 0, .1)})`;
-    ctx.fillText(label.word, -label.vx * 3.2, -label.vy * 3.2);
+    ctx.direction = label.lang === "AR" || label.lang === "HE" ? "rtl" : "ltr";
+    ctx.font = `700 ${size}px SFMono-Regular, "Noto Sans Thai", Thonburi, "Noto Naskh Arabic", "Geeza Pro", "Noto Sans Hebrew", "Arial Hebrew", "Noto Sans Devanagari", "Kohinoor Devanagari", "Hiragino Sans", "Apple SD Gothic Neo", "PingFang HK", Menlo, sans-serif`;
+    // Chromatic copies extend back towards the source, creating a light
+    // typographic extrusion instead of a flat scale-up.
+    const radialX = label.x - label.homeX;
+    const radialY = label.y - label.homeY;
+    const radialLength = Math.hypot(radialX, radialY) || 1;
+    const extrusion = spread * (4 + label.depth * 7);
+    const extrudeX = -radialX / radialLength * extrusion;
+    const extrudeY = -radialY / radialLength * extrusion;
+    ctx.fillStyle = `rgba(86,223,239,${clamp((.045 + energy * .055) * reveal, 0, .13)})`;
+    ctx.fillText(label.word, extrudeX * 1.7 - label.vx * 1.2, extrudeY * 1.7 - label.vy * 1.2);
+    ctx.fillStyle = `rgba(101,88,232,${clamp((.04 + energy * .05) * reveal, 0, .12)})`;
+    ctx.fillText(label.word, extrudeX * .82, extrudeY * .82);
     ctx.shadowColor = `rgba(${colour.join(",")},.22)`;
     ctx.shadowBlur = renderProfile.labelShadow;
-    ctx.fillStyle = `rgba(${colour.join(",")},${clamp(label.alpha + energy * .38, 0, .9)})`;
+    ctx.fillStyle = `rgba(${colour.join(",")},${clamp((label.alpha + energy * .38) * reveal, 0, .9)})`;
     ctx.fillText(label.word, 0, 0);
     ctx.shadowBlur = 0;
     ctx.font = `700 ${Math.max(7, Math.round(size * .34))}px SFMono-Regular, Menlo, monospace`;
-    ctx.fillStyle = `rgba(${colour.join(",")},${clamp(label.alpha + energy * .25, 0, .72)})`;
+    ctx.fillStyle = `rgba(${colour.join(",")},${clamp((label.alpha + energy * .25) * reveal, 0, .72)})`;
     ctx.fillText(label.lang, 0, size * .86);
     ctx.restore();
   });
@@ -701,6 +962,7 @@ function playCachedRecording(requestId) {
 
 function playRecording() {
   const requestId = ++playbackId;
+  primeRecording(activeIndex);
   if (activeRecording) {
     activeRecording.pause();
     activeRecording = null;
@@ -736,7 +998,9 @@ function playRecording() {
 }
 
 function animate(time) {
-  if (renderProfile.fps < 60 && time - lastRenderedTime < 1000 / renderProfile.fps) {
+  const idle = energy < .012 && shockwaves.length === 0 && mouse.speed < .1;
+  const targetFps = idle ? Math.min(24, renderProfile.fps) : renderProfile.fps;
+  if (time - lastRenderedTime < 1000 / targetFps) {
     requestAnimationFrame(animate);
     return;
   }
@@ -747,7 +1011,7 @@ function animate(time) {
   mouse.speed *= Math.pow(.84, dt / 16.67);
   drawBackground(time);
   drawCopies(time, dt);
-  drawParticles(dt);
+  drawParticles(dt, time);
   drawShockwaves(dt, time);
   if (time - lastHudUpdate > renderProfile.hudInterval) {
     updateHud();
@@ -795,9 +1059,12 @@ window.visualViewport?.addEventListener("resize", requestResize);
 document.addEventListener("fullscreenchange", () => setTimeout(requestResize, 80));
 
 buildNavigation();
-// Decode recordings as early as possible; cached HTML audio remains the fallback.
-prepareAudioBuffers();
 requestAnimationFrame(() => {
   resize();
   requestAnimationFrame(animate);
+  // Let the first visual frames settle before loading and decoding audio.
+  setTimeout(() => {
+    primeRecording(activeIndex);
+    prepareAudioBuffers();
+  }, 260);
 });
