@@ -108,12 +108,13 @@ let activeBufferSource = null;
 let playbackId = 0;
 let audioContext = null;
 let lastRenderedTime = 0;
+const SOURCE_INK = "#00143d";
 let renderProfile = {
   name: "high",
-  dpr: 1.4,
-  particleDivisor: 390,
-  minParticles: 1900,
-  maxParticles: 3400,
+  dpr: 1.25,
+  particleDivisor: 470,
+  minParticles: 1350,
+  maxParticles: 2400,
   scanlineStep: 4,
   noiseCount: 24,
   textThreshold: .42,
@@ -176,31 +177,31 @@ function chooseRenderProfile() {
 
   if (shortSide < 620 || (touchDevice && shortSide < 760)) {
     return {
-      name: "mobile", dpr: 1.1, particleDivisor: 430,
-      minParticles: 950, maxParticles: 1450, scanlineStep: 10,
+      name: "mobile", dpr: 1, particleDivisor: 520,
+      minParticles: 700, maxParticles: 1100, scanlineStep: 10,
       noiseCount: 8, textThreshold: .7, labelShadow: 1,
       wavePoints: 72, maxWaves: 1, fps: 40, hudInterval: 200
     };
   }
   if (touchDevice) {
     return {
-      name: "tablet", dpr: 1.2, particleDivisor: 520,
-      minParticles: 1250, maxParticles: 2100, scanlineStep: 8,
+      name: "tablet", dpr: 1.1, particleDivisor: 600,
+      minParticles: 900, maxParticles: 1500, scanlineStep: 8,
       noiseCount: 12, textThreshold: .64, labelShadow: 1.5,
       wavePoints: 96, maxWaves: 1, fps: 45, hudInterval: 160
     };
   }
   if (cores <= 4 || memory <= 4 || area > 2200000) {
     return {
-      name: "balanced", dpr: 1.25, particleDivisor: 470,
-      minParticles: 1700, maxParticles: 3000, scanlineStep: 6,
+      name: "balanced", dpr: 1.15, particleDivisor: 560,
+      minParticles: 1150, maxParticles: 2050, scanlineStep: 6,
       noiseCount: 16, textThreshold: .54, labelShadow: 3,
       wavePoints: 120, maxWaves: 2, fps: 50, hudInterval: 170
     };
   }
   return {
-    name: "high", dpr: 1.4, particleDivisor: 390,
-    minParticles: 1900, maxParticles: 3400, scanlineStep: 5,
+    name: "high", dpr: 1.25, particleDivisor: 470,
+    minParticles: 1350, maxParticles: 2400, scanlineStep: 5,
     noiseCount: 20, textThreshold: .46, labelShadow: 3,
     wavePoints: 150, maxWaves: 2, fps: 60, hudInterval: 150
   };
@@ -278,8 +279,8 @@ function prepareAudioBuffers() {
   let cursor = 0;
 
   const scheduleIdle = callback => {
-    if ("requestIdleCallback" in window) window.requestIdleCallback(callback, { timeout: 900 });
-    else setTimeout(callback, 220);
+    if ("requestIdleCallback" in window) window.requestIdleCallback(callback, { timeout: 1500 });
+    else setTimeout(callback, 520);
   };
 
   const prepareNext = () => {
@@ -444,6 +445,9 @@ function buildGlyph() {
           copyLang: response.lang,
           copyThreshold: Math.random() * .78,
           wordSeed: Math.random(),
+          // A dark structural core stays close to the source glyph so the
+          // Cantonese character remains readable through the eruption.
+          sourceAnchor: Math.random() < .38,
           burstDelay: Math.random() * 55,
           burstSerial: old?.burstSerial ?? eruptionSerial,
           burstX: layout.cx + burstCos * targetRadius,
@@ -631,8 +635,9 @@ function updateParticle(p, dt, time) {
     }
   }
 
-  const targetX = p.ox + (p.burstX - p.ox) * scatter;
-  const targetY = p.oy + (p.burstY - p.oy) * scatter;
+  const sourceHold = p.sourceAnchor ? .08 : 1;
+  const targetX = p.ox + (p.burstX - p.ox) * scatter * sourceHold;
+  const targetY = p.oy + (p.burstY - p.oy) * scatter * sourceHold;
   // A compact, critically damped spring follows the animated destination.
   // This creates a visible overshoot without allowing particles to leave the
   // screen or pause while a large ballistic force settles.
@@ -688,25 +693,32 @@ function drawBackground() {
 function drawParticles(dt, time) {
   const state = transformationState(time);
   const wordCutoff = renderProfile.name === "mobile" || renderProfile.name === "tablet" ? .91 : .86;
+  const eruptionSettled = !Number.isFinite(eruptionStartedAt) || time - eruptionStartedAt > 2350;
+  const resting = eruptionSettled && energy < .012 && !mouse.active && shockwaves.length === 0;
+  const centreX = glyphOriginX + glyphRenderSize / 2;
+  const centreY = glyphOriginY + glyphRenderSize / 2;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   for (const p of particles) {
-    updateParticle(p, dt, time);
-    const displacement = Math.hypot(p.x - p.ox, p.y - p.oy);
-    const perspective = 1 + p.scatter * (.025 + p.depth * .045);
-    const centreX = glyphOriginX + glyphRenderSize / 2;
-    const centreY = glyphOriginY + glyphRenderSize / 2;
+    if (!resting) updateParticle(p, dt, time);
+    const displacement = resting ? 0 : Math.hypot(p.x - p.ox, p.y - p.oy);
+    const visualScatter = p.scatter * (p.sourceAnchor ? .1 : 1);
+    const perspective = 1 + visualScatter * (.025 + p.depth * .045);
     const renderX = centreX + (p.x - centreX) * perspective;
     const renderY = centreY + (p.y - centreY) * perspective;
-    const renderScale = 1 + p.scatter * (.22 + p.depth * .42) + p.flow * .34;
-    if (p.flow > .2 && p.seed > .5) ctx.fillStyle = "#56dff0";
+    const renderScale = 1 + visualScatter * (.22 + p.depth * .42) + p.flow * .34;
+    if (p.sourceAnchor) ctx.fillStyle = SOURCE_INK;
+    else if (p.flow > .2 && p.seed > .5) ctx.fillStyle = "#56dff0";
     else if (p.flow > .12) ctx.fillStyle = "#315cff";
     else if (displacement > 82 && p.seed > .52) ctx.fillStyle = "#56cfe5";
     else if (displacement > 48 && p.seed > .43) ctx.fillStyle = "#315cff";
     else if (displacement > 20 && p.seed > .55) ctx.fillStyle = "#2e83cf";
-    else ctx.fillStyle = "#031b4e";
-    const sourceAlpha = clamp(.72 + p.seed * .28 + p.flow * .16 - displacement * .001, .34, 1)
-      * (1 - state.copy * .62);
+    else ctx.fillStyle = SOURCE_INK;
+    // Keep the Cantonese source visibly darker than the water field, including
+    // during the multilingual transformation. It recedes, but never washes out.
+    const sourceAlpha = (p.sourceAnchor ? .98 : 1)
+      * clamp(.84 + p.seed * .16 + p.flow * .12 - displacement * .00055, .64, 1)
+      * (1 - state.copy * .24);
     if (p.flow > .06 && p.seed > .36) {
       const trailLength = 1.8 + p.flow * 3.4;
       ctx.globalAlpha = clamp(sourceAlpha * p.flow * .32, 0, .3);
@@ -714,7 +726,7 @@ function drawParticles(dt, time) {
       const grain = (1 + p.seed * 1.8) * renderScale;
       ctx.fillRect(renderX - p.vx * trailLength, renderY - p.vy * trailLength, grain, grain);
     }
-    const becomesCopy = p.wordSeed > wordCutoff && state.copy > p.copyThreshold;
+    const becomesCopy = !p.sourceAnchor && p.wordSeed > wordCutoff && state.copy > p.copyThreshold;
     if (becomesCopy) {
       const colour = LANGUAGE_COLOURS[p.copyLang] || LANGUAGE_COLOURS.EN;
       const wordAlpha = clamp((state.copy - p.copyThreshold) * 2.8, 0, 1)
@@ -750,6 +762,9 @@ function drawParticles(dt, time) {
 }
 
 function drawCopies(time, dt) {
+  const eruptionIdle = !Number.isFinite(eruptionStartedAt)
+    || (time - eruptionStartedAt > 2350 && energy < .012 && !mouse.active);
+  if (eruptionIdle) return;
   const frameScale = dt / 16.67;
   labels.forEach(label => {
     // Before the first click there is no eruption clock. Use a negative idle
@@ -1062,9 +1077,13 @@ buildNavigation();
 requestAnimationFrame(() => {
   resize();
   requestAnimationFrame(animate);
-  // Let the first visual frames settle before loading and decoding audio.
+  // Preload only the selected recording after the first paint. Full waveform
+  // analysis waits until the opening composition is already stable, so audio
+  // decoding cannot interrupt the first visible interaction.
   setTimeout(() => {
     primeRecording(activeIndex);
+  }, 120);
+  setTimeout(() => {
     prepareAudioBuffers();
-  }, 260);
+  }, 1400);
 });
