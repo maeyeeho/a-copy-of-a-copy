@@ -111,16 +111,16 @@ let lastRenderedTime = 0;
 const SOURCE_INK = "#00143d";
 let renderProfile = {
   name: "high",
-  dpr: 1.25,
-  particleDivisor: 470,
-  minParticles: 1350,
-  maxParticles: 2400,
+  dpr: 1,
+  particleDivisor: 850,
+  minParticles: 850,
+  maxParticles: 1250,
   scanlineStep: 4,
   noiseCount: 24,
-  textThreshold: .42,
-  labelShadow: 3,
-  wavePoints: 180,
-  maxWaves: 2,
+  textThreshold: .64,
+  labelShadow: 0,
+  wavePoints: 88,
+  maxWaves: 1,
   fps: 60,
   hudInterval: 150
 };
@@ -177,33 +177,33 @@ function chooseRenderProfile() {
 
   if (shortSide < 620 || (touchDevice && shortSide < 760)) {
     return {
-      name: "mobile", dpr: 1, particleDivisor: 520,
-      minParticles: 700, maxParticles: 1100, scanlineStep: 10,
-      noiseCount: 8, textThreshold: .7, labelShadow: 1,
-      wavePoints: 72, maxWaves: 1, fps: 40, hudInterval: 200
+      name: "mobile", dpr: 1, particleDivisor: 760,
+      minParticles: 520, maxParticles: 780, scanlineStep: 10,
+      noiseCount: 6, textThreshold: .76, labelShadow: 0,
+      wavePoints: 56, maxWaves: 1, fps: 45, hudInterval: 220
     };
   }
   if (touchDevice) {
     return {
-      name: "tablet", dpr: 1.1, particleDivisor: 600,
-      minParticles: 900, maxParticles: 1500, scanlineStep: 8,
-      noiseCount: 12, textThreshold: .64, labelShadow: 1.5,
-      wavePoints: 96, maxWaves: 1, fps: 45, hudInterval: 160
+      name: "tablet", dpr: 1, particleDivisor: 820,
+      minParticles: 620, maxParticles: 920, scanlineStep: 8,
+      noiseCount: 8, textThreshold: .72, labelShadow: 0,
+      wavePoints: 64, maxWaves: 1, fps: 50, hudInterval: 180
     };
   }
   if (cores <= 4 || memory <= 4 || area > 2200000) {
     return {
-      name: "balanced", dpr: 1.15, particleDivisor: 560,
-      minParticles: 1150, maxParticles: 2050, scanlineStep: 6,
-      noiseCount: 16, textThreshold: .54, labelShadow: 3,
-      wavePoints: 120, maxWaves: 2, fps: 50, hudInterval: 170
+      name: "balanced", dpr: 1, particleDivisor: 900,
+      minParticles: 720, maxParticles: 1050, scanlineStep: 7,
+      noiseCount: 10, textThreshold: .68, labelShadow: 0,
+      wavePoints: 76, maxWaves: 1, fps: 60, hudInterval: 190
     };
   }
   return {
-    name: "high", dpr: 1.25, particleDivisor: 470,
-    minParticles: 1350, maxParticles: 2400, scanlineStep: 5,
-    noiseCount: 20, textThreshold: .46, labelShadow: 3,
-    wavePoints: 150, maxWaves: 2, fps: 60, hudInterval: 150
+    name: "high", dpr: 1, particleDivisor: 850,
+    minParticles: 850, maxParticles: 1250, scanlineStep: 6,
+    noiseCount: 12, textThreshold: .64, labelShadow: 0,
+    wavePoints: 88, maxWaves: 1, fps: 60, hudInterval: 170
   };
 }
 
@@ -284,6 +284,14 @@ function prepareAudioBuffers() {
   };
 
   const prepareNext = () => {
+    // Audio decoding is CPU-heavy on Safari/Chrome and can collide with the
+    // first particle eruption. Never start another decode while the visible
+    // spring animation is active.
+    if (Number.isFinite(eruptionStartedAt)
+        && performance.now() - eruptionStartedAt < 2500) {
+      scheduleIdle(prepareNext);
+      return;
+    }
     if (cursor >= order.length) {
       const detected = audioBuffers.filter(Boolean).length;
       document.querySelector("#audio-source").textContent = detected
@@ -692,7 +700,10 @@ function drawBackground() {
 
 function drawParticles(dt, time) {
   const state = transformationState(time);
-  const wordCutoff = renderProfile.name === "mobile" || renderProfile.name === "tablet" ? .91 : .86;
+  // Full words are considerably more expensive than small glyphs on a large
+  // canvas. The larger floating labels already carry the multilingual content,
+  // so only a light selection of particles needs to become whole words.
+  const wordCutoff = renderProfile.name === "mobile" || renderProfile.name === "tablet" ? .965 : .94;
   const eruptionSettled = !Number.isFinite(eruptionStartedAt) || time - eruptionStartedAt > 2350;
   const resting = eruptionSettled && energy < .012 && !mouse.active && shockwaves.length === 0;
   const centreX = glyphOriginX + glyphRenderSize / 2;
@@ -772,6 +783,10 @@ function drawCopies(time, dt) {
     const elapsed = Number.isFinite(eruptionStartedAt)
       ? time - eruptionStartedAt - label.burstDelay
       : -1;
+    // Do not run layout, spring and font work for a label before its reveal.
+    // The 18 ms offsets are visually simultaneous but split the expensive
+    // first click across several animation frames.
+    if (elapsed <= 0) return;
     const attack = clamp(elapsed / 390, 0, 1);
     const returnProgress = clamp((elapsed - 640) / 1080, 0, 1);
     const attackEase = 1 - Math.exp(-4.2 * attack) * Math.cos(attack * Math.PI * 3.25);
@@ -867,11 +882,8 @@ function drawCopies(time, dt) {
     ctx.fillText(label.word, extrudeX * 1.7 - label.vx * 1.2, extrudeY * 1.7 - label.vy * 1.2);
     ctx.fillStyle = `rgba(101,88,232,${clamp((.04 + energy * .05) * reveal, 0, .12)})`;
     ctx.fillText(label.word, extrudeX * .82, extrudeY * .82);
-    ctx.shadowColor = `rgba(${colour.join(",")},.22)`;
-    ctx.shadowBlur = renderProfile.labelShadow;
     ctx.fillStyle = `rgba(${colour.join(",")},${clamp((label.alpha + energy * .38) * reveal, 0, .9)})`;
     ctx.fillText(label.word, 0, 0);
-    ctx.shadowBlur = 0;
     ctx.font = `700 ${Math.max(7, Math.round(size * .34))}px SFMono-Regular, Menlo, monospace`;
     ctx.fillStyle = `rgba(${colour.join(",")},${clamp((label.alpha + energy * .25) * reveal, 0, .72)})`;
     ctx.fillText(label.lang, 0, size * .86);
@@ -888,20 +900,12 @@ function drawShockwaves(dt, time) {
     const progress = 1 - wave.life;
     const attack = Math.min(1, progress * 8);
     const amplitude = (7 + wave.radius * .035) * wave.strength * attack * Math.pow(Math.max(0, wave.life), .42);
-    const gradient = ctx.createLinearGradient(
-      wave.x - wave.radius,
-      wave.y,
-      wave.x + wave.radius,
-      wave.y
-    );
-    gradient.addColorStop(0, `rgba(0,174,202,${Math.max(0, wave.life) * .58})`);
-    gradient.addColorStop(.45, `rgba(49,92,255,${Math.max(0, wave.life) * .86})`);
-    gradient.addColorStop(.72, `rgba(101,88,232,${Math.max(0, wave.life) * .72})`);
-    gradient.addColorStop(1, `rgba(46,131,207,${Math.max(0, wave.life) * .48})`);
-    ctx.strokeStyle = gradient;
+    const colourMix = .5 + Math.sin(progress * Math.PI) * .5;
+    const red = Math.round(35 + colourMix * 48);
+    const green = Math.round(116 + colourMix * 18);
+    const blue = Math.round(225 + colourMix * 24);
+    ctx.strokeStyle = `rgba(${red},${green},${blue},${Math.max(0, wave.life) * .82})`;
     ctx.lineWidth = 1.15;
-    ctx.shadowColor = `rgba(49,92,255,${Math.max(0, wave.life) * .34})`;
-    ctx.shadowBlur = 9;
     ctx.beginPath();
     const points = renderProfile.wavePoints;
     for (let i = 0; i <= points; i++) {
@@ -1041,8 +1045,11 @@ document.addEventListener("pointerdown", unlockAudio, { capture: true, passive: 
 canvas.addEventListener("pointerdown", event => {
   document.body.classList.add("has-interacted");
   pointerMove(event);
-  playRecording();
   burst(mouse.x, mouse.y, 1.1);
+  // Let the browser paint the first outward frame before starting audio work.
+  // The recording follows one frame later (about 16 ms), which remains
+  // perceptually simultaneous while removing the click hitch.
+  requestAnimationFrame(playRecording);
 });
 
 window.addEventListener("keydown", event => {
@@ -1085,5 +1092,5 @@ requestAnimationFrame(() => {
   }, 120);
   setTimeout(() => {
     prepareAudioBuffers();
-  }, 1400);
+  }, 5200);
 });
