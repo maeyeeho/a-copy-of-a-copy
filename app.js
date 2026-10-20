@@ -581,9 +581,28 @@ function burst(x, y, strength = 1) {
     phase: Math.random() * Math.PI * 2
   });
   particles.forEach(p => {
-    const dx = p.x - x;
-    const dy = p.y - y;
+    const dx = p.ox - x;
+    const dy = p.oy - y;
     const distance = Math.hypot(dx, dy) || 1;
+    // Recalculate the destination for every click. The clicked coordinate is
+    // now the true pressure centre instead of the centre of the Chinese glyph.
+    // A tiny seeded fan keeps particles near the click from forming a line.
+    const clickAngle = Math.atan2(dy, dx) + (p.seed - .5) * .42;
+    const directionX = Math.cos(clickAngle);
+    const directionY = Math.sin(clickAngle);
+    const margin = Math.max(18, Math.min(width, height) * .025);
+    const edgeX = Math.abs(directionX) < .001
+      ? Infinity
+      : (directionX > 0 ? width - margin - p.ox : p.ox - margin) / Math.abs(directionX);
+    const edgeY = Math.abs(directionY) < .001
+      ? Infinity
+      : (directionY > 0 ? height - margin - p.oy : p.oy - margin) / Math.abs(directionY);
+    const edgeDistance = Math.max(36, Math.min(edgeX, edgeY));
+    const proximity = clamp(1 - distance / (Math.min(width, height) * .92), .34, 1);
+    const travel = edgeDistance * (.55 + p.depth * .17) * proximity * strength;
+    p.burstX = p.ox + directionX * travel;
+    p.burstY = p.oy + directionY * travel;
+
     const range = Math.min(width, height) * .43;
     if (distance < range) {
       // A very small physical kick gives the click an immediate response. The
@@ -592,6 +611,10 @@ function burst(x, y, strength = 1) {
       p.vx += dx / distance * force;
       p.vy += dy / distance * force;
     }
+  });
+  labels.forEach(label => {
+    label.burstOriginX = x;
+    label.burstOriginY = y;
   });
   energy = 1;
 }
@@ -794,8 +817,12 @@ function drawCopies(time, dt) {
     const springExtension = 1 + Math.sin(Math.max(0, elapsed) * .012 + label.phase) * .06 * (1 - returnEase);
     const spread = clamp(attackEase * (1 - returnEase), 0, 1.1);
     const reveal = clamp(attackEase * Math.pow(1 - returnEase, .72), 0, 1);
-    const currentX = label.homeX + (label.baseX - label.homeX) * spread * springExtension;
-    const currentY = label.homeY + (label.baseY - label.homeY) * spread * springExtension;
+    const burstOriginX = label.burstOriginX ?? label.homeX;
+    const burstOriginY = label.burstOriginY ?? label.homeY;
+    const returningOriginX = burstOriginX + (label.homeX - burstOriginX) * returnEase;
+    const returningOriginY = burstOriginY + (label.homeY - burstOriginY) * returnEase;
+    const currentX = returningOriginX + (label.baseX - returningOriginX) * spread * springExtension;
+    const currentY = returningOriginY + (label.baseY - returningOriginY) * spread * springExtension;
     const targetX = currentX
       + Math.sin(time * label.speedX + label.phase) * label.orbitX * spread
       + Math.sin(time * .000071 + label.phase2) * label.orbitX * .38 * spread;
@@ -806,8 +833,10 @@ function drawCopies(time, dt) {
     // Each language leaves the character a fraction later, producing a
     // progressive multilingual eruption instead of one rigid explosion.
     if (eruptionSerial > 0 && elapsed >= 0 && elapsed < 4200 && label.burstSerial !== eruptionSerial) {
-      const outwardX = label.baseX - label.homeX;
-      const outwardY = label.baseY - label.homeY;
+      label.x = burstOriginX;
+      label.y = burstOriginY;
+      const outwardX = label.baseX - burstOriginX;
+      const outwardY = label.baseY - burstOriginY;
       const outwardLength = Math.hypot(outwardX, outwardY) || 1;
       const kick = .62 + label.depth * .52;
       label.vx += outwardX / outwardLength * kick;
